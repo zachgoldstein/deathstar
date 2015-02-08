@@ -1,11 +1,13 @@
 package lib
 
 import (
+	"fmt"
 	"os"
-	"io/ioutil"
+	"os/signal"
+	"time"
 )
 
-func DoReqDiff() {
+func DoScaleTest() {
 
 	/*
 	Pseudocode for flow
@@ -20,11 +22,38 @@ func DoReqDiff() {
 	 */
 
 	reqOpts, outOpts, err := digestOptions()
+	fmt.Println("reqOpts,",reqOpts, "outOpts, ", outOpts)
 	if (err != nil) {
 		issueError(err)
 	}
 
+	responseStatsChan := make(chan ResponseStats)
 
+	maxTestTime := time.Second * 5
+
+	spawner := NewSpawner(3, maxTestTime, responseStatsChan)
+	accumulator := NewAccumulator(spawner.StatsChan)
+	spawner.Start()
+
+	reportFrequency := time.Second * 1
+	analyser := NewAnalyser(accumulator, reportFrequency)
+	NewReporter(analyser.StatsChan)
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+
+	fmt.Println("Main blocking flow")
+
+	for {
+		select {
+		case <-spawner.Done:
+			fmt.Println("Completed execution")
+			os.Exit(0)
+		case <-c:
+			fmt.Println("Interupted, exiting")
+			os.Exit(1)
+		}
+	}
 }
 
 //issueError will print an error to stdOut that is better formatted than a normal panic

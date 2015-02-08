@@ -9,7 +9,7 @@ import (
 func constructRequest(opts RequestOptions) (req *http.Request, err error) {
 	method := "GET"
 	reqURL := "http://localhost:8080/test"
-	payload := testJSONDoc
+	payload := ``
 	return http.NewRequest(method, reqURL, strings.NewReader(payload))
 }
 
