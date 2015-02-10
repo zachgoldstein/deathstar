@@ -37,7 +37,6 @@ func (e *Executor) Start(){
 		e.IsExecuting = true
 		fmt.Println("executor", e.Id, "issuing request", j)
 
-//		stats := testRequest()
 		requester := NewRequestRecorder(e.RequestOptions)
 		stats := requester.PerformRequest()
 

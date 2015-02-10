@@ -23,6 +23,7 @@ type ResponseStats struct {
 	TimeToRespond time.Duration
 	TotalTime time.Duration
 	ResponsePayload []byte
+	NumExecutors int
 }
 
 const tickerSecFrequency = 1
@@ -54,6 +55,15 @@ func (s *Spawner) Start () {
 	fmt.Println("timeout duration ",s.Duration)
 	timeoutTimer := time.NewTimer(s.Duration)
 
+	//Goroutine to attach the current concurrency to stats
+	go func() {
+		for newStats := range s.StatsChan{
+			newStats.NumExecutors = len(s.ExecutorPool)
+			s.StatsChan <-newStats
+		}
+	}()
+
+	//Goroutine to trigger periodic requests
 	go func () {
 		for {
 			select {

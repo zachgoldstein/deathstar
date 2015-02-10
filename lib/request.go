@@ -64,7 +64,6 @@ func (r *RequestRecorder) createHttpClient() *http.Client {
 	client.Transport = transport
 
 	return client
-
 }
 
 func (r *RequestRecorder) DialWithTimeRecorder(network, address string) (conn net.Conn, err error) {
@@ -83,7 +82,6 @@ func (r *RequestRecorder) DialWithTimeRecorder(network, address string) (conn ne
 }
 
 func (r *RequestRecorder) issueRequest(req *http.Request, client *http.Client)(resPayload []byte, err error) {
-
 	resp, err := client.Do(req)
 	if ( err != nil) {
 		return resPayload, err

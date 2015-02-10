@@ -15,6 +15,7 @@ type Analyser struct {
 
 type AggregatedStats struct {
 	TotalRequests int
+	ConcurrentExecutors int
 }
 
 func NewAnalyser(acc *Accumulator, frequency time.Duration) (*Analyser) {
