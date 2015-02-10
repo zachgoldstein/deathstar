@@ -3,12 +3,13 @@ package lib
 import (
 	"time"
 	"fmt"
+	"net/http"
 )
 
 //Spawner is responsible for initiating requests on a channel at a specific rate
 //It manages a pool of executors that will create and issue requests
 type Spawner struct {
-	Rate uint
+	Rate int
 	ExecutorPool []*Executor
 	Ticker *time.Ticker
 	RequestChan chan bool
@@ -16,6 +17,8 @@ type Spawner struct {
 	Duration time.Duration
 	Done chan bool
 	RequestOptions RequestOptions
+	Started bool
+	CustomClient *http.Client
 }
 
 type ResponseStats struct {
@@ -28,7 +31,7 @@ type ResponseStats struct {
 
 const tickerSecFrequency = 1
 
-func NewSpawner(rate uint, maxExecutionTime time.Duration, responseStatsChan chan ResponseStats, reqOpts RequestOptions) *Spawner {
+func NewSpawner(rate int, maxExecutionTime time.Duration, responseStatsChan chan ResponseStats, reqOpts RequestOptions) *Spawner {
 	return &Spawner{
 		Ticker : time.NewTicker(time.Second * tickerSecFrequency),
 		Rate : rate,
@@ -42,13 +45,6 @@ func NewSpawner(rate uint, maxExecutionTime time.Duration, responseStatsChan cha
 
 func (s *Spawner) Start () {
 	fmt.Println("Spawning requests for ",s.Duration, " seconds")
-
-	s.ExecutorPool = make([]*Executor, s.Rate)
-	for i:= 0; i < int(s.Rate); i++ {
-		executor := NewExecutor(fmt.Sprint(i), s.RequestChan, s.StatsChan, s.RequestOptions)
-		fmt.Println("Created executor ",fmt.Sprint(i))
-		s.ExecutorPool[i] = executor
-	}
 
 	fmt.Println("Blocking select for ticks and timeouts")
 
@@ -79,6 +75,15 @@ func (s *Spawner) Start () {
 			}
 		}
 	}()
+
+	//Start any executors in the pool
+	for _, executor := range s.ExecutorPool {
+		if !executor.Started {
+			go executor.Start()
+		}
+	}
+
+	s.Started = true
 }
 
 func (s *Spawner) MakeRequests() {
@@ -98,13 +103,33 @@ func (s *Spawner) MakeRequests() {
 		for i:= 0; i < numToAdd; i++ {
 			fmt.Println("Adding executor to pool", string(len(s.ExecutorPool) + i))
 			newExecutor := NewExecutor(fmt.Sprint(len(s.ExecutorPool) + i), s.RequestChan, s.StatsChan, s.RequestOptions)
+			if s.HasCustomClient() {
+				newExecutor.CustomClient = s.CustomClient
+			}
 			newExecutors = append(newExecutors, newExecutor)
 		}
 	}
 
 	s.ExecutorPool = append(s.ExecutorPool, newExecutors...)
 
+	//Start executors if the spawner is started
+	if s.Started {
+		for _, executor := range s.ExecutorPool {
+			if !executor.Started {
+				go executor.Start()
+			}
+		}
+	}
+
 	for i:= 0; i < int(s.Rate); i++ {
 		s.RequestChan <- true
 	}
 }
+
+func (s *Spawner) HasCustomClient() bool {
+	if (s.CustomClient != nil && s.CustomClient.Transport != nil) {
+		return true
+	}
+	return false
+}
+

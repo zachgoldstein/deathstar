@@ -10,6 +10,7 @@ type RequestOptions struct {
 	Timeout time.Duration
 	KeepAlive time.Duration
 	TLSHandshakeTimeout time.Duration
+	Payload []byte
 }
 
 var DefaultRequestOptions RequestOptions = RequestOptions{

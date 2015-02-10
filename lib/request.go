@@ -3,9 +3,9 @@ package lib
 import (
 	"io/ioutil"
 	"net/http"
-	"strings"
 	"time"
 	"net"
+	"bytes"
 )
 
 type RequestRecorder struct {
@@ -13,6 +13,7 @@ type RequestRecorder struct {
 	RequestTime time.Duration
 	TotalTime time.Duration
 	RequestOptions RequestOptions
+	CustomClient *http.Client
 }
 
 func NewRequestRecorder (reqOpts RequestOptions) *RequestRecorder {
@@ -30,7 +31,12 @@ func (r *RequestRecorder) PerformRequest() ResponseStats {
 		issueError(err)
 	}
 
-	respBody, err := r.issueRequest(req, r.createHttpClient())
+	client := r.createHttpClient()
+	if r.HasCustomClient() {
+		client = r.CustomClient
+	}
+
+	respBody, err := r.issueRequest(req, client)
 	if (err != nil) {
 		issueError(err)
 	}
@@ -48,10 +54,7 @@ func (r *RequestRecorder) PerformRequest() ResponseStats {
 }
 
 func (r *RequestRecorder) constructRequest() (req *http.Request, err error) {
-	method := "GET"
-	reqURL := "http://localhost:8080/test"
-	payload := ``
-	return http.NewRequest(method, reqURL, strings.NewReader(payload))
+	return http.NewRequest(r.RequestOptions.Method, r.RequestOptions.URL, bytes.NewReader(r.RequestOptions.Payload))
 }
 
 func (r *RequestRecorder) createHttpClient() *http.Client {
@@ -89,4 +92,11 @@ func (r *RequestRecorder) issueRequest(req *http.Request, client *http.Client)(r
 
 	defer resp.Body.Close()
 	return ioutil.ReadAll(resp.Body)
+}
+
+func (r *RequestRecorder) HasCustomClient() bool {
+	if (r.CustomClient != nil && r.CustomClient.Transport != nil) {
+		return true
+	}
+	return false
 }
