@@ -31,7 +31,7 @@ func DoScaleTest() {
 
 	maxTestTime := time.Second * 5
 
-	spawner := NewSpawner(3, maxTestTime, responseStatsChan)
+	spawner := NewSpawner(3, maxTestTime, responseStatsChan, reqOpts)
 	accumulator := NewAccumulator(spawner.StatsChan)
 	spawner.Start()
 

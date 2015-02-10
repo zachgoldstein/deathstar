@@ -15,16 +15,19 @@ type Spawner struct {
 	StatsChan chan ResponseStats
 	Duration time.Duration
 	Done chan bool
+	RequestOptions RequestOptions
 }
 
 type ResponseStats struct {
 	TimeToConnect time.Duration
 	TimeToRespond time.Duration
+	TotalTime time.Duration
+	ResponsePayload []byte
 }
 
 const tickerSecFrequency = 1
 
-func NewSpawner(rate uint, maxExecutionTime time.Duration, responseStatsChan chan ResponseStats) *Spawner {
+func NewSpawner(rate uint, maxExecutionTime time.Duration, responseStatsChan chan ResponseStats, reqOpts RequestOptions) *Spawner {
 	return &Spawner{
 		Ticker : time.NewTicker(time.Second * tickerSecFrequency),
 		Rate : rate,
@@ -32,6 +35,7 @@ func NewSpawner(rate uint, maxExecutionTime time.Duration, responseStatsChan cha
 		Done : make(chan bool),
 		StatsChan: responseStatsChan,
 		Duration: maxExecutionTime,
+		RequestOptions : reqOpts,
 	}
 }
 
@@ -40,7 +44,7 @@ func (s *Spawner) Start () {
 
 	s.ExecutorPool = make([]*Executor, s.Rate)
 	for i:= 0; i < int(s.Rate); i++ {
-		executor := NewExecutor(fmt.Sprint(i), s.RequestChan, s.StatsChan)
+		executor := NewExecutor(fmt.Sprint(i), s.RequestChan, s.StatsChan, s.RequestOptions)
 		fmt.Println("Created executor ",fmt.Sprint(i))
 		s.ExecutorPool[i] = executor
 	}
@@ -55,7 +59,7 @@ func (s *Spawner) Start () {
 			select {
 			case tick := <-s.Ticker.C:
 				fmt.Println("TICK at ",tick)
-				s.InitiateRequests()
+				s.MakeRequests()
 			case timeout := <-timeoutTimer.C:
 				fmt.Println("Timed out, ",timeout)
 				s.Ticker.Stop()
@@ -67,7 +71,7 @@ func (s *Spawner) Start () {
 	}()
 }
 
-func (s *Spawner) InitiateRequests() {
+func (s *Spawner) MakeRequests() {
 	//Issue requests on the channel
 	//If all of the executors are busy, expand the pool as neccessary and create more executors.
 	newExecutors := []*Executor{}
@@ -83,7 +87,7 @@ func (s *Spawner) InitiateRequests() {
 		fmt.Println("Adding ",numToAdd," executors to pool")
 		for i:= 0; i < numToAdd; i++ {
 			fmt.Println("Adding executor to pool", string(len(s.ExecutorPool) + i))
-			newExecutor := NewExecutor(fmt.Sprint(len(s.ExecutorPool) + i), s.RequestChan, s.StatsChan)
+			newExecutor := NewExecutor(fmt.Sprint(len(s.ExecutorPool) + i), s.RequestChan, s.StatsChan, s.RequestOptions)
 			newExecutors = append(newExecutors, newExecutor)
 		}
 	}

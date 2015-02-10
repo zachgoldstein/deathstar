@@ -1,10 +1,22 @@
 package lib
 
+import "time"
+
 type RequestOptions struct {
 	Method string
 	URL string
 	Headers map[string]string
 	CPUs uint
+	Timeout time.Duration
+	KeepAlive time.Duration
+	TLSHandshakeTimeout time.Duration
+}
+
+var DefaultRequestOptions RequestOptions = RequestOptions{
+	Timeout : time.Second * 30,
+	KeepAlive : time.Second * 30,
+	TLSHandshakeTimeout : time.Second * 10,
+	CPUs : 1,
 }
 
 type OutputOptions struct {
