@@ -8,6 +8,7 @@ import (
 type Accumulator struct {
 	mu *sync.Mutex
 	Stats []ResponseStats
+
 	StatsChan chan ResponseStats
 }
 
@@ -19,7 +20,7 @@ func NewAccumulator(statsChan chan ResponseStats) *Accumulator {
 	newAccumulator.Start()
 	return newAccumulator
 }
-//Setup will create a go routine to listen on channel for new stats
+//Start will create a go routine to listen on channel for new stats
 func (a *Accumulator)Start(){
 	go func() {
 		for stats := range a.StatsChan {
