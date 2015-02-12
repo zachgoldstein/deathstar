@@ -11,6 +11,7 @@ type RequestOptions struct {
 	KeepAlive time.Duration
 	TLSHandshakeTimeout time.Duration
 	Payload []byte
+	JSONSchema string
 }
 
 var DefaultRequestOptions RequestOptions = RequestOptions{
@@ -24,7 +25,6 @@ type OutputOptions struct {
 	OutputHTML bool
 	ShowFullJSON bool
 	HTMLOutputLocation string
-	JSONSchema string
 }
 
 type Options struct {
@@ -35,9 +35,48 @@ type Options struct {
 func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 	return RequestOptions{
 		Method : "GET",
-		URL : "http://localhost:8080/test",
+		URL : "http://localhost:8080/test/fail/error",
+		JSONSchema : testJSONSchema,
 	}, OutputOptions {
 		OutputHTML : true,
 		ShowFullJSON : true,
 	}, nil
 }
+
+var testJSONSchema = `
+{
+    "$schema": "http://json-schema.org/draft-04/schema#",
+    "title": "Product",
+    "description": "A product from Acme's catalog",
+    "type": "object",
+    "properties": {
+        "id": {
+            "description": "The unique identifier for a product",
+            "type": "integer"
+        },
+        "name": {
+            "description": "Name of the product",
+            "type": "string"
+        },
+        "stringNumber": {
+            "description": "A number from 0-9",
+            "type": "string",
+            "pattern":"[0-9]"
+        },
+        "price": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        },
+        "tags": {
+            "type": "array",
+            "items": {
+                "type": "string"
+            },
+            "minItems": 1,
+            "uniqueItems": true
+        }
+    },
+    "required": ["id", "name", "price"]
+}
+`

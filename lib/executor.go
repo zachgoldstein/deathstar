@@ -43,7 +43,7 @@ func (e *Executor) Start(){
 		if e.HasCustomClient() {
 			requester.CustomClient = e.CustomClient
 		}
-		stats := requester.PerformRequest()
+		stats, _ := requester.PerformRequest()
 
 		fmt.Println("executor", e.Id, "returning stats", j)
 		e.IsExecuting = false

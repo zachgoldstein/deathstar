@@ -6,6 +6,10 @@ import (
 	"time"
 	"net"
 	"bytes"
+	"github.com/xeipuuv/gojsonschema"
+	"fmt"
+	"net/http/httputil"
+	"sort"
 )
 
 type RequestRecorder struct {
@@ -22,7 +26,7 @@ func NewRequestRecorder (reqOpts RequestOptions) *RequestRecorder {
 	}
 }
 
-func (r *RequestRecorder) PerformRequest() ResponseStats {
+func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 
 	now := time.Now()
 
@@ -36,7 +40,7 @@ func (r *RequestRecorder) PerformRequest() ResponseStats {
 		client = r.CustomClient
 	}
 
-	respBody, err := r.issueRequest(req, client)
+	resp, err := r.issueRequest(req, client)
 	if (err != nil) {
 		issueError(err)
 	}
@@ -45,12 +49,19 @@ func (r *RequestRecorder) PerformRequest() ResponseStats {
 
 	r.RequestTime = r.TotalTime - r.ConnectionTime
 
+	valid, failCategory, err := r.validateResponse(resp, r.RequestOptions.JSONSchema)
+
+	reqBody, respBody, err := r.isolatePayloads(req, resp)
+
 	return ResponseStats {
 		TimeToConnect: r.ConnectionTime,
 		TimeToRespond: r.RequestTime,
 		TotalTime: r.TotalTime,
-		ResponsePayload: respBody,
-	}
+		Failure : !valid,
+		FailCategory : failCategory,
+		ReqPayload : reqBody,
+		RespPayload : respBody,
+	}, nil
 }
 
 func (r *RequestRecorder) constructRequest() (req *http.Request, err error) {
@@ -84,14 +95,8 @@ func (r *RequestRecorder) DialWithTimeRecorder(network, address string) (conn ne
 	return conn, err
 }
 
-func (r *RequestRecorder) issueRequest(req *http.Request, client *http.Client)(resPayload []byte, err error) {
-	resp, err := client.Do(req)
-	if ( err != nil) {
-		return resPayload, err
-	}
-
-	defer resp.Body.Close()
-	return ioutil.ReadAll(resp.Body)
+func (r *RequestRecorder) issueRequest(req *http.Request, client *http.Client)(resp *http.Response, err error) {
+	return client.Do(req)
 }
 
 func (r *RequestRecorder) HasCustomClient() bool {
@@ -99,4 +104,60 @@ func (r *RequestRecorder) HasCustomClient() bool {
 		return true
 	}
 	return false
+}
+
+func (r *RequestRecorder) isolatePayloads (req *http.Request, resp *http.Response) (reqPayload string, respPayload string, err error) {
+	defer resp.Body.Close()
+	respPayloadBytes, err := ioutil.ReadAll(resp.Body)
+	respPayload = string(respPayloadBytes)
+	if (err != nil) {
+		return reqPayload, respPayload, err
+	}
+
+	defer req.Body.Close()
+	reqPayloadBytes, err := ioutil.ReadAll(req.Body)
+	reqPayload = string(reqPayloadBytes)
+	if (err != nil) {
+		return reqPayload, respPayload, err
+	}
+
+	return string(reqPayload), string(respPayload), err
+}
+
+func (r *RequestRecorder) validateResponse (resp *http.Response, schema string) (valid bool, failCategory string, err error) {
+	respDump, err := httputil.DumpResponse(resp, true)
+	fmt.Println("DEBUGGING RAW RESPONSE ================== /n ",string(respDump), " /n ==================")
+
+	if resp.StatusCode != 200 {
+		return false, resp.Status, nil
+	}
+
+	defer resp.Body.Close()
+	respPayload, err := ioutil.ReadAll(resp.Body)
+	if (err != nil) {
+		return false, "", err
+	}
+
+	responseLoader := gojsonschema.NewStringLoader(string(respPayload))
+	schemaLoader := gojsonschema.NewStringLoader(schema)
+	res, err := gojsonschema.Validate(schemaLoader, responseLoader)
+	if (err != nil) {
+		return false, err.Error(), err
+	}
+
+	fmt.Println("VALID RESPONSE? ",res)
+
+	if !res.Valid() {
+		errors := []string{}
+		for _, validateError := range res.Errors() {
+			errors = append(errors, fmt.Sprint(validateError))
+		}
+		sort.Strings(errors)
+
+		return false, fmt.Sprint(errors), nil
+	}
+
+
+
+	return true, "", nil
 }

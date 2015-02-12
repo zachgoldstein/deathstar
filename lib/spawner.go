@@ -27,6 +27,10 @@ type ResponseStats struct {
 	TotalTime time.Duration
 	ResponsePayload []byte
 	NumExecutors int
+	Failure bool
+	FailCategory string
+	ReqPayload string
+	RespPayload string
 }
 
 const tickerSecFrequency = 1

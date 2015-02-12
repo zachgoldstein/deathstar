@@ -31,6 +31,9 @@ type AggregatedStats struct {
 
 	TimeToConnectPercentiles []time.Duration
 	MaxTimeToConnect time.Duration
+
+	Failures int
+	FailureCounts map[string]int
 }
 
 func NewAnalyser(acc *Accumulator, frequency time.Duration, percentiles []float64) (*Analyser) {
@@ -63,6 +66,8 @@ func (a *Analyser) Analyse() {
 
 		stats.MaxConcurrentExecutors = MaxConcurrency(a.Accumulator.Stats)
 
+		stats.Failures, stats.FailureCounts = GroupFailures(a.Accumulator.Stats)
+
 		fmt.Println("Performed analysis and sent to channel ",stats, " ConcurrentExecutors Avg ",stats.AvgConcurrentExecutors, " Max ",stats.MaxConcurrentExecutors)
 		a.StatsChan <- stats
 	}
@@ -88,7 +93,23 @@ func MaxConcurrency(stats []ResponseStats) int {
 	return max
 }
 
-func DetermineMaxLatencies(stats []ResponseStats)(maxTotalTime time.Duration, maxTimeToRespond time.Duration, maxTimeToConnect time.Duration) {
+func GroupFailures(stats []ResponseStats) (failures int, failureGroups map[string]int) {
+	failureGroups = make(map[string]int)
+	for _, stat := range stats {
+		if stat.Failure {
+			failures += 1
+			if fails, ok := failureGroups[stat.FailCategory]; ok {
+				failureGroups[stat.FailCategory] = fails + 1
+			} else {
+				failureGroups[stat.FailCategory] = 1
+			}
+		}
+	}
+	fmt.Println("Grouped ",failures, " failures into map, ",failureGroups)
+	return failures, failureGroups
+}
+
+func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, maxTimeToRespond time.Duration, maxTimeToConnect time.Duration) {
 	maxTotalTimeInt := int64(0)
 	maxTimeToRespondInt := int64(0)
 	maxTimeToConnectInt := int64(0)
