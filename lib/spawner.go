@@ -48,11 +48,11 @@ func NewSpawner(rate int, maxExecutionTime time.Duration, responseStatsChan chan
 }
 
 func (s *Spawner) Start () {
-	fmt.Println("Spawning requests for ",s.Duration, " seconds")
+	Log("spawn", fmt.Sprintln("Spawning requests for ",s.Duration, " seconds") )
 
-	fmt.Println("Blocking select for ticks and timeouts")
+	Log("spawn", fmt.Sprintln("Blocking select for ticks and timeouts") )
 
-	fmt.Println("timeout duration ",s.Duration)
+	Log("spawn", fmt.Sprintln("timeout duration ",s.Duration) )
 	timeoutTimer := time.NewTimer(s.Duration)
 
 	//Goroutine to attach the current concurrency to stats
@@ -68,10 +68,10 @@ func (s *Spawner) Start () {
 		for {
 			select {
 			case tick := <-s.Ticker.C:
-				fmt.Println("TICK at ",tick)
+				Log("spawn", fmt.Sprintln("TICK at ",tick) )
 				s.MakeRequests()
 			case timeout := <-timeoutTimer.C:
-				fmt.Println("Timed out, ",timeout)
+				Log("spawn", fmt.Sprintln("Timed out, ",timeout) )
 				s.Ticker.Stop()
 				//TODO: make sure that does not send done until all requests are finished
 				// use another goroutine and check every request after the ticker is stopped
@@ -103,9 +103,9 @@ func (s *Spawner) MakeRequests() {
 
 	if numAvailableExecutors < int(s.Rate) {
 		numToAdd := int(s.Rate) - numAvailableExecutors
-		fmt.Println("Adding ",numToAdd," executors to pool")
+		Log("spawn", fmt.Sprintln("Adding ",numToAdd," executors to pool") )
 		for i:= 0; i < numToAdd; i++ {
-			fmt.Println("Adding executor to pool", string(len(s.ExecutorPool) + i))
+			Log("spawn", fmt.Sprintln("Adding executor to pool", string(len(s.ExecutorPool) + i)) )
 			newExecutor := NewExecutor(fmt.Sprint(len(s.ExecutorPool) + i), s.RequestChan, s.StatsChan, s.RequestOptions)
 			if s.HasCustomClient() {
 				newExecutor.CustomClient = s.CustomClient

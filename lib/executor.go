@@ -37,7 +37,7 @@ func (e *Executor) Start(){
 	e.Started = true
 	for j := range e.RequestChan {
 		e.IsExecuting = true
-		fmt.Println("executor", e.Id, "issuing request", j)
+		Log("execute", fmt.Sprintln("executor", e.Id, "issuing request", j) )
 
 		requester := NewRequestRecorder(e.RequestOptions)
 		if e.HasCustomClient() {
@@ -45,7 +45,7 @@ func (e *Executor) Start(){
 		}
 		stats, _ := requester.PerformRequest()
 
-		fmt.Println("executor", e.Id, "returning stats", j)
+		Log("execute", fmt.Sprintln("executor", e.Id, "returning stats", j) )
 		e.IsExecuting = false
 		e.StatsChan <- stats
 	}
@@ -53,7 +53,7 @@ func (e *Executor) Start(){
 
 func testRequest() ResponseStats {
 	duration := time.Millisecond * time.Duration(3000 * rand.Float64())
-	fmt.Println("test request length ",duration)
+	Log("execute", fmt.Sprintln("test request length ",duration) )
 	time.Sleep(duration)
 	return ResponseStats{
 		TimeToConnect : time.Millisecond,

@@ -2,7 +2,6 @@ package lib
 
 import (
 	"sync"
-	"fmt"
 )
 
 type Accumulator struct {
@@ -25,8 +24,6 @@ func (a *Accumulator)Start(){
 	go func() {
 		for stats := range a.StatsChan {
 			a.mu.Lock()
-			fmt.Println("Stats received, appending to slice", stats)
-			fmt.Println("numExecutors", stats.NumExecutors)
 			a.Stats = append(a.Stats, stats)
 			a.mu.Unlock()
 		}

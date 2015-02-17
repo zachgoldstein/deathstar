@@ -126,7 +126,7 @@ func (r *RequestRecorder) isolatePayloads (req *http.Request, resp *http.Respons
 
 func (r *RequestRecorder) validateResponse (resp *http.Response, schema string) (valid bool, failCategory string, err error) {
 	respDump, err := httputil.DumpResponse(resp, true)
-	fmt.Println("DEBUGGING RAW RESPONSE ================== /n ",string(respDump), " /n ==================")
+	Log("debug", "DEBUGGING RAW RESPONSE ================== /n ",string(respDump), " /n ==================")
 
 	if resp.StatusCode != 200 {
 		return false, resp.Status, nil
@@ -145,7 +145,7 @@ func (r *RequestRecorder) validateResponse (resp *http.Response, schema string) 
 		return false, err.Error(), err
 	}
 
-	fmt.Println("VALID RESPONSE? ",res)
+	Log("debug", "VALID RESPONSE? ",res)
 
 	if !res.Valid() {
 		errors := []string{}

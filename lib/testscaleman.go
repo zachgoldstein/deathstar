@@ -22,7 +22,7 @@ func DoScaleTest() {
 	 */
 
 	reqOpts, outOpts, err := digestOptions()
-	fmt.Println("reqOpts,",reqOpts, "outOpts, ", outOpts)
+	Log("debug", fmt.Sprintf("reqOpts,",reqOpts, "outOpts, ", outOpts) )
 	if (err != nil) {
 		issueError(err)
 	}
@@ -36,22 +36,22 @@ func DoScaleTest() {
 	spawner.Start()
 
 	reportFrequency := time.Second * 1
-	percentiles := []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999}
+	percentiles := []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999, 0.9999}
 	analyser := NewAnalyser(accumulator, reportFrequency, percentiles)
 	NewReporter(analyser.StatsChan)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
 
-	fmt.Println("Main blocking flow")
+	Log("debug", fmt.Sprintf("Main blocking flow") )
 
 	for {
 		select {
 		case <-spawner.Done:
-			fmt.Println("Completed execution")
+			Log("debug", fmt.Sprintf("Completed execution") )
 			os.Exit(0)
 		case <-c:
-			fmt.Println("Interupted, exiting")
+			Log("debug", fmt.Sprintf("Interupted, exiting") )
 			os.Exit(1)
 		}
 	}

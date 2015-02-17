@@ -7,6 +7,8 @@ deps:
 	go get github.com/smartystreets/goconvey
 	go get github.com/xeipuuv/gojsonschema
 	go get github.com/nicholasf/fakepoint
+	go get github.com/aybabtme/uniplot/histogram
+	go get github.com/jroimartin/gocui
 
 test:
 	go test ${FILES} -v
