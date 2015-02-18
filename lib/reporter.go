@@ -6,16 +6,17 @@ import (
 	"time"
 	"io/ioutil"
 	"bytes"
-	"golang.org/x/crypto/ssh/terminal"
-	"log"
 	"github.com/jroimartin/gocui"
 	"sync"
+	"log"
+	"errors"
 )
 
 type Reporter struct {
 	DataChan chan AggregatedStats
-	OriginalState *terminal.State
+	Done chan bool
 	GUI *gocui.Gui
+	Pretty bool
 
 	mu *sync.Mutex
 	LatestHistogram string
@@ -28,17 +29,23 @@ type Reporter struct {
 	LatestTotalHistogram string
 	LatestResponseHistogram string
 
+	LatestData AggregatedStats
+
 	LatestSummary string
 }
 
-func NewReporter(dataChan chan AggregatedStats) *Reporter {
+func NewReporter(dataChan chan AggregatedStats, pretty bool) *Reporter {
 	reporter := &Reporter{
 		mu : &sync.Mutex{},
 		DataChan : dataChan,
+		Done : make(chan bool),
+		Pretty : pretty,
 	}
 
 	reporter.Start()
-	go reporter.SetupRenderer()
+	if (reporter.Pretty) {
+		go reporter.SetupRenderer()
+	}
 
 	return reporter
 }
@@ -50,8 +57,8 @@ func (r *Reporter) SetupRenderer() {
 		log.Panicln(err)
 	}
 	defer r.GUI.Close()
-	r.GUI.SetLayout(r.layout)
-	if err := r.GUI.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, quit); err != nil {
+	r.GUI.SetLayout(r.Render)
+	if err := r.GUI.SetKeybinding("", gocui.KeyCtrlC, gocui.ModNone, r.quit); err != nil {
 		log.Panicln(err)
 	}
 	err = r.GUI.MainLoop()
@@ -61,8 +68,6 @@ func (r *Reporter) SetupRenderer() {
 }
 
 func (r *Reporter) Start() {
-	r.OriginalState, _ = terminal.MakeRaw(0)
-
 	go r.chanSetup()
 }
 
@@ -76,22 +81,15 @@ func (r *Reporter) chanSetup() {
 //		fmt.Fprintf(os.Stdout, "%v \n", counter)
 		r.mu.Lock()
 		r.GenerateReport(data)
-		r.GUI.SetLayout(r.layout)
+		r.LatestData = data
+		if (r.Pretty) {
+			r.GUI.SetLayout(r.Render)
+		}
 		r.mu.Unlock()
 //		fmt.Fprintf(os.Stdout, "1. this is a test of new lines")
 //		fmt.Fprintf(os.Stdout, "2. this is a test of new lines")
 		//		r.RefreshingLog(r.GenerateReport(data))
 	}
-}
-
-func (r *Reporter) RefreshingLog(output string) {
-//	oldState, err := terminal.MakeRaw(0)
-//	if err != nil {
-//		panic(err)
-//	}
-//	defer terminal.Restore(0, oldState)
-//	Log("all", "\x0c  ", output)
-	fmt.Println(output)
 }
 
 func (r *Reporter) GenerateReport(stats AggregatedStats) {
@@ -120,7 +118,10 @@ func (r *Reporter) GenerateHistogram(stats AggregatedStats) (connectOutput, tota
 }
 
 func getHist(data []float64) (output string, err error) {
-	hist := histogram.PowerHist(2, data)
+	if (len(data) == 0) {
+		return "", errors.New("No data found to create histogram")
+	}
+	hist := histogram.PowerHist(2.0, data)
 
 	strBuf := bytes.NewBuffer([]byte{})
 
@@ -204,7 +205,7 @@ Status code distribution:
  */
 
 
-func (r *Reporter) layout(g *gocui.Gui) error {
+func (r *Reporter) Render(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 
 	leftView, err := g.SetView("left", 0, 13, maxX/3, maxY-1)
@@ -244,12 +245,13 @@ func (r *Reporter) layout(g *gocui.Gui) error {
 		}
 	}
 	fmt.Fprintln(topView, "Summary")
-	fmt.Fprintln(topView, "-")
-	fmt.Fprintln(topView, "-")
-	fmt.Fprintln(topView, "-")
-	fmt.Fprintln(topView, "-")
-	fmt.Fprintln(topView, "-")
-
+	fmt.Fprintln(topView, "Total Request: ", r.LatestData.TotalRequests)
+	fmt.Fprintln(topView, "Failures: ", r.LatestData.Failures)
+	fmt.Fprintln(topView, "Maximum Response Time: ", r.LatestData.MaxTotalTime)
+	fmt.Fprintln(topView, "Minimum Response Time: ", r.LatestData.MinTotalTime)
+	fmt.Fprintln(topView, "Started at, ", r.LatestData.StartTime)
+	fmt.Fprintln(topView, "Run for, ", r.LatestData.TimeElapsed)
+	fmt.Fprintln(topView, "Total Running Time ", r.LatestData.TotalTestDuration)
 
 	titleView, err := g.SetView("titleView", maxX/2-8, 0, maxX/2+8, 2)
 	if err != nil {
@@ -262,6 +264,18 @@ func (r *Reporter) layout(g *gocui.Gui) error {
 	return nil
 }
 
-func quit(g *gocui.Gui, v *gocui.View) error {
+func (r *Reporter) Stop() {
+	if (r.Pretty) {
+		r.Render(r.GUI)
+		r.GUI.Close()
+	}
+
+	fmt.Printf("FINAL STATS: %v", r.LatestData)
+}
+
+func (r *Reporter) quit(g *gocui.Gui, v *gocui.View) error {
+	r.Stop()
+
+	r.Done <- true
 	return gocui.Quit
 }

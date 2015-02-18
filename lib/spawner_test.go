@@ -10,8 +10,9 @@ import (
 func TestMakeRequests(t *testing.T) {
 	c.Convey("With a working spawner instance", t, func(){
 		responseStatsChan := make(chan ResponseStats)
+		overallStatsChan := make(chan OverallStats)
 		rate := 3
-		spawner := NewSpawner(rate, time.Second * 2, responseStatsChan, DefaultRequestOptions)
+		spawner := NewSpawner(rate, time.Second * 2, responseStatsChan, overallStatsChan, DefaultRequestOptions)
 		c.Convey("I can trigger the spawner to trigger the correct number of requests", func(){
 			numRequests := 0
 			go func() {
@@ -28,8 +29,9 @@ func TestMakeRequests(t *testing.T) {
 func TestTimeouts(t *testing.T) {
 	c.Convey("With a working spawner instance", t, func(){
 		responseStatsChan := make(chan ResponseStats)
+		overallStatsChan := make(chan OverallStats)
 		timeout := time.Millisecond * 10
-		spawner := NewSpawner(0, timeout, responseStatsChan, DefaultRequestOptions)
+		spawner := NewSpawner(0, timeout, responseStatsChan, overallStatsChan, DefaultRequestOptions)
 		c.Convey("It will timeout at the correct time", func(){
 			spawner.Start()
 			done := false
@@ -47,16 +49,17 @@ func TestTimeouts(t *testing.T) {
 func TestPeriodicRequests(t *testing.T) {
 	c.Convey("With a working spawner instance", t, func(){
 		responseStatsChan := make(chan ResponseStats)
+		overallStatsChan := make(chan OverallStats)
 		rate := 3
 		reqOpts := RequestOptions{
 			URL : "http://fake.com",
 			Method : "GET",
 			Payload : []byte(""),
 		}
-		spawner := NewSpawner(rate, time.Second * 2, responseStatsChan, reqOpts)
+		spawner := NewSpawner(rate, time.Second * 2, responseStatsChan, overallStatsChan, reqOpts)
 		c.Convey("The spawner the correct number of requests periodically", func(){
 
-			accumulator := NewAccumulator(spawner.StatsChan)
+			accumulator := NewAccumulator(spawner.StatsChan, overallStatsChan)
 
 			maker := fakepoint.NewFakepointMaker()
 			maker.NewGet(reqOpts.URL, 200)

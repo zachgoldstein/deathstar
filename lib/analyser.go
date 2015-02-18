@@ -19,14 +19,21 @@ type Analyser struct {
 type AggregatedStats struct {
 	RawStats []ResponseStats
 
+	StartTime time.Time
+	TotalTestDuration time.Duration
+	TimeElapsed time.Duration
+
 	TotalRequests int
 	AvgConcurrentExecutors int
 	MaxConcurrentExecutors int
+
+	//TODO: add a measure of the actual req/s the system is executing, avg, max, min
 
 	Percentiles []float64
 
 	TotalTimePercentiles []time.Duration
 	MaxTotalTime time.Duration
+	MinTotalTime time.Duration
 
 	TimeToRespondPercentiles []time.Duration
 	MaxTimeToRespond time.Duration
@@ -55,38 +62,52 @@ func NewAnalyser(acc *Accumulator, frequency time.Duration, percentiles []float6
 
 func (a *Analyser) Start() {
 	a.Ticker = time.NewTicker(a.Frequency)
-	go a.Analyse()
+	a.Analyse()
 }
 
 func (a *Analyser) Analyse() {
-	for _ = range a.Ticker.C {
-		Log("analyse", fmt.Sprintln("Analysing mock") )
+	go func() {
+		for _ = range a.Ticker.C {
 
-		stats := AggregatedStats{
-			RawStats : a.Accumulator.Stats,
-			Percentiles : a.Percentiles,
+			Log("analyse", fmt.Sprintln("Analysing mock") )
+
+			stats := AggregatedStats{
+				RawStats : a.Accumulator.Stats,
+				Percentiles : a.Percentiles,
+			}
+
+			stats.StartTime, stats.TimeElapsed, stats.TotalTestDuration = DetermineOverallTimes(a.Accumulator.OverallStats)
+
+			stats.TimeToConnectPercentiles, stats.TimeToRespondPercentiles, stats.TotalTimePercentiles = DeterminePercentilesLatencies(a.Percentiles, a.Accumulator.Stats)
+
+			stats.MaxTotalTime, stats.MaxTimeToRespond, stats.MaxTimeToConnect = DetermineMaxLatencies(a.Accumulator.Stats)
+
+			stats.MinTotalTime = DetermineMinLatencies(a.Accumulator.Stats)
+
+			stats.TotalRequests = len(a.Accumulator.Stats)
+
+			stats.AvgConcurrentExecutors = AverageConcurrency(a.Accumulator.OverallStats)
+
+			stats.MaxConcurrentExecutors = MaxConcurrency(a.Accumulator.OverallStats)
+
+			stats.Failures, stats.FailureCounts = GroupFailures(a.Accumulator.Stats)
+
+			stats.TimeToRespond, stats.TimeToConnect, stats.TotalTime = extractLatencies(a.Accumulator.Stats)
+
+			Log("analyse", fmt.Sprintln("Performed analysis and sent to channel ",stats, " ConcurrentExecutors Avg ",stats.AvgConcurrentExecutors, " Max ",stats.MaxConcurrentExecutors) )
+			a.StatsChan <- stats
 		}
-
-		stats.TimeToConnectPercentiles, stats.TimeToRespondPercentiles, stats.TotalTimePercentiles = DeterminePercentilesLatencies(a.Percentiles, a.Accumulator.Stats)
-
-		stats.MaxTotalTime, stats.MaxTimeToRespond, stats.MaxTimeToConnect = DetermineMaxLatencies(a.Accumulator.Stats)
-
-		stats.TotalRequests = len(a.Accumulator.Stats)
-
-		stats.AvgConcurrentExecutors = AverageConcurrency(a.Accumulator.Stats)
-
-		stats.MaxConcurrentExecutors = MaxConcurrency(a.Accumulator.Stats)
-
-		stats.Failures, stats.FailureCounts = GroupFailures(a.Accumulator.Stats)
-
-		stats.TimeToRespond, stats.TimeToConnect, stats.TotalTime = extractLatencies(a.Accumulator.Stats)
-
-		Log("analyse", fmt.Sprintln("Performed analysis and sent to channel ",stats, " ConcurrentExecutors Avg ",stats.AvgConcurrentExecutors, " Max ",stats.MaxConcurrentExecutors) )
-		a.StatsChan <- stats
-	}
+	}()
 }
 
-func AverageConcurrency(stats []ResponseStats) int {
+func DetermineOverallTimes(overallStats []OverallStats) (startTime time.Time, timeElapsed time.Duration, totalTestDuration time.Duration)  {
+	if (len(overallStats) == 0 ) { return time.Now(), time.Nanosecond, time.Nanosecond}
+
+	latestStat := overallStats[len(overallStats)-1]
+	return latestStat.StartTime, latestStat.TimeElapsed, latestStat.TotalTestDuration
+}
+
+func AverageConcurrency(stats []OverallStats) int {
 	if (len(stats) == 0 ) { return 0}
 	total := 0
 	for _, stat := range stats {
@@ -95,7 +116,7 @@ func AverageConcurrency(stats []ResponseStats) int {
 	return int( math.Ceil( float64(total / len(stats)) ) )
 }
 
-func MaxConcurrency(stats []ResponseStats) int {
+func MaxConcurrency(stats []OverallStats) int {
 	if (len(stats) == 0 ) { return 0}
 	max := 0
 	for _, stat := range stats {
@@ -124,12 +145,17 @@ func GroupFailures(stats []ResponseStats) (failures int, failureGroups map[strin
 
 func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, maxTimeToRespond time.Duration, maxTimeToConnect time.Duration) {
 	maxTotalTimeInt := int64(0)
+	minTotalTimeInt := int64(0)
 	maxTimeToRespondInt := int64(0)
 	maxTimeToConnectInt := int64(0)
-	for _, stat := range stats {
+	for index, stat := range stats {
 		if (stat.TotalTime.Nanoseconds() > maxTotalTimeInt) {
 			maxTotalTimeInt = stat.TotalTime.Nanoseconds()
 		}
+		if (index == 0 || stat.TotalTime.Nanoseconds() < minTotalTimeInt) {
+			minTotalTimeInt = stat.TotalTime.Nanoseconds()
+		}
+
 		if (stat.TimeToConnect.Nanoseconds() > maxTimeToConnectInt) {
 			maxTimeToConnectInt = stat.TimeToConnect.Nanoseconds()
 		}
@@ -141,6 +167,18 @@ func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, m
 	maxTotalTime = time.Duration(maxTotalTimeInt) * time.Nanosecond
 	maxTimeToConnect = time.Duration(maxTimeToConnectInt) * time.Nanosecond
 	maxTimeToRespond = time.Duration(maxTimeToRespondInt) * time.Nanosecond
+	return
+}
+
+func DetermineMinLatencies(stats []ResponseStats) (minTotalTime time.Duration) {
+	minTotalTimeInt := int64(0)
+	for index, stat := range stats {
+		if (index == 0 || stat.TotalTime.Nanoseconds() < minTotalTimeInt) {
+			minTotalTimeInt = stat.TotalTime.Nanoseconds()
+		}
+	}
+
+	minTotalTime = time.Duration(minTotalTimeInt) * time.Nanosecond
 	return
 }
 
@@ -182,9 +220,14 @@ func DeterminePercentilesLatencies(percentiles []float64, stats []ResponseStats)
 
 func extractLatencies(stats []ResponseStats) (TimeToRespond, TimeToConnect, TotalTime []float64) {
 	for _, stat := range stats {
-		TimeToRespond = append(TimeToRespond, float64(stat.TimeToRespond.Nanoseconds()))
-		TimeToConnect = append(TimeToConnect, float64(stat.TimeToConnect.Nanoseconds()))
-		TotalTime = append(TotalTime, float64(stat.TotalTime.Nanoseconds()))
+		respond := float64( stat.TimeToRespond.Nanoseconds() )
+		if (respond != 0) { TimeToRespond = append(TimeToRespond, respond) }
+
+		connect := float64( stat.TimeToConnect.Nanoseconds() )
+		if (connect != 0) { TimeToConnect = append(TimeToConnect, connect) }
+
+		total := float64( stat.TotalTime.Nanoseconds() )
+		if (total != 0) {TotalTime = append(TotalTime, total ) }
 	}
 	return
 }
