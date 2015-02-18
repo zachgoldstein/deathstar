@@ -35,7 +35,7 @@ type Options struct {
 func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 	return RequestOptions{
 		Method : "GET",
-		URL : "http://localhost:8080/test/fail/error",
+		URL : "http://localhost:8080/test/fail/mix",
 		JSONSchema : testJSONSchema,
 	}, OutputOptions {
 		OutputHTML : true,

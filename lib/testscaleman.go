@@ -10,18 +10,6 @@ import (
 
 func DoScaleTest() {
 
-	/*
-	Pseudocode for flow
-	Digest command line params & config json file to generate http.Request
-	Setup a spawner, which will initiate requests on a channel at a specific rate
-	Setup a pool of executors, according to the concurrency, which issue the requests
-	Setup an accumulator, which receives all responses and stores their stats
-	Create a channel for the spawner, executor pool and accumulator to use.
-
-	Setup an analyser, which periodically scans the accumulator and generates meaningful aggregated stats
-	Setup a reporter, which renders the aggregated stats to stdOut and a live-updating page.
-	 */
-
 	reqOpts, outOpts, err := digestOptions()
 	Log("top", fmt.Sprintf("reqOpts,",reqOpts, "outOpts, ", outOpts) )
 	if (err != nil) {
@@ -33,7 +21,7 @@ func DoScaleTest() {
 	responseStatsChan := make(chan ResponseStats)
 	overallStatsChan := make(chan OverallStats)
 
-	maxTestTime := time.Second * 5
+	maxTestTime := time.Second * 10
 
 	spawner := NewSpawner(3, maxTestTime, responseStatsChan, overallStatsChan, reqOpts)
 	accumulator := NewAccumulator(spawner.StatsChan, spawner.OverallStatsChan)

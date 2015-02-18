@@ -9,6 +9,7 @@ deps:
 	go get github.com/nicholasf/fakepoint
 	go get github.com/aybabtme/uniplot/histogram
 	go get github.com/jroimartin/gocui
+	go get github.com/cheggaaa/pb
 
 test:
 	go test ${FILES} -v

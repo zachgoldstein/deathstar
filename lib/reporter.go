@@ -10,6 +10,8 @@ import (
 	"sync"
 	"log"
 	"errors"
+	"github.com/cheggaaa/pb"
+	"sort"
 )
 
 type Reporter struct {
@@ -28,6 +30,8 @@ type Reporter struct {
 	LatestConnectHistogram string
 	LatestTotalHistogram string
 	LatestResponseHistogram string
+	LatestProgress string
+	LatestFailures []string
 
 	LatestData AggregatedStats
 
@@ -92,9 +96,36 @@ func (r *Reporter) chanSetup() {
 	}
 }
 
-func (r *Reporter) GenerateReport(stats AggregatedStats) {
+func (r *Reporter) GenerateReport(stats AggregatedStats)  {
 	r.LatestConnectPercentiles, r.LatestTotalPercentiles, r.LatestResponsePercentiles = r.GeneratePercentiles(stats)
 	r.LatestConnectHistogram, r.LatestTotalHistogram, r.LatestResponseHistogram = r.GenerateHistogram(stats)
+	r.LatestProgress = r.GenerateProgressBar(stats)
+	r.LatestFailures = r.GenerateFailures(stats)
+}
+
+func (r *Reporter) GenerateFailures(stats AggregatedStats) (failures []string) {
+	for title, count := range stats.FailureCounts {
+		failures = append(failures, fmt.Sprintf("%v Failures: %v", count, title) )
+	}
+	sort.Strings(failures)
+	return failures
+}
+
+func (r *Reporter) GenerateProgressBar(stats AggregatedStats) string {
+	count := int(stats.TotalTestDuration.Nanoseconds())
+	bar := pb.StartNew(count)
+	bar.NotPrint = true
+	output := bytes.NewBuffer([]byte{})
+	bar.Output = output
+	bar.ShowCounters = false
+
+	progress := stats.TimeElapsed.Nanoseconds()
+	bar.Set(int(progress))
+	bar.Finish()
+
+	bytes, _ := ioutil.ReadAll(output)
+
+	return string(bytes)
 }
 
 func (r *Reporter) GenerateHistogram(stats AggregatedStats) (connectOutput, totalOutput, responseOutput string){
@@ -208,7 +239,7 @@ Status code distribution:
 func (r *Reporter) Render(g *gocui.Gui) error {
 	maxX, maxY := g.Size()
 
-	leftView, err := g.SetView("left", 0, 13, maxX/3, maxY-1)
+	leftView, err := g.SetView("left", 0, 15, maxX/3, maxY-1)
 	if err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
@@ -218,7 +249,7 @@ func (r *Reporter) Render(g *gocui.Gui) error {
 	fmt.Fprintln(leftView, r.LatestResponsePercentiles)
 	fmt.Fprintln(leftView, r.LatestResponseHistogram)
 
-	rightView, err := g.SetView("right", maxX*2/3, 13, maxX-1, maxY-1)
+	rightView, err := g.SetView("right", maxX*2/3, 15, maxX-1, maxY-1)
 	if err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
@@ -228,7 +259,7 @@ func (r *Reporter) Render(g *gocui.Gui) error {
 	fmt.Fprintln(rightView, r.LatestTotalPercentiles)
 	fmt.Fprintln(rightView, r.LatestTotalHistogram)
 
-	middleView, err := g.SetView("middle", maxX/3, 13, maxX*2/3, maxY-1)
+	middleView, err := g.SetView("middle", maxX/3, 15, maxX*2/3, maxY-1)
 	if err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
@@ -238,20 +269,40 @@ func (r *Reporter) Render(g *gocui.Gui) error {
 	fmt.Fprintln(middleView, r.LatestConnectPercentiles)
 	fmt.Fprintln(middleView, r.LatestConnectHistogram)
 
-	topView, err := g.SetView("topView", 0, 3, maxX-1, 13)
+	topLeftView, err := g.SetView("topLeftView", 0, 6, maxX/2, 15)
 	if err != nil {
 		if err != gocui.ErrorUnkView {
 			return err
 		}
 	}
-	fmt.Fprintln(topView, "Summary")
-	fmt.Fprintln(topView, "Total Request: ", r.LatestData.TotalRequests)
-	fmt.Fprintln(topView, "Failures: ", r.LatestData.Failures)
-	fmt.Fprintln(topView, "Maximum Response Time: ", r.LatestData.MaxTotalTime)
-	fmt.Fprintln(topView, "Minimum Response Time: ", r.LatestData.MinTotalTime)
-	fmt.Fprintln(topView, "Started at, ", r.LatestData.StartTime)
-	fmt.Fprintln(topView, "Run for, ", r.LatestData.TimeElapsed)
-	fmt.Fprintln(topView, "Total Running Time ", r.LatestData.TotalTestDuration)
+	fmt.Fprintln(topLeftView, "Summary")
+	fmt.Fprintln(topLeftView, "Total Request: ", r.LatestData.TotalRequests)
+	fmt.Fprintln(topLeftView, "Failures: ", r.LatestData.Failures)
+	fmt.Fprintln(topLeftView, "Maximum Response Time: ", r.LatestData.MaxTotalTime)
+	fmt.Fprintln(topLeftView, "Minimum Response Time: ", r.LatestData.MinTotalTime)
+	fmt.Fprintln(topLeftView, "Started at, ", r.LatestData.StartTime)
+	fmt.Fprintln(topLeftView, "Run for, ", r.LatestData.TimeElapsed)
+	fmt.Fprintln(topLeftView, "Total Running Time ", r.LatestData.TotalTestDuration)
+
+	topRightView, err := g.SetView("topRightView", maxX/2, 6, maxX-1, 15)
+	if err != nil {
+		if err != gocui.ErrorUnkView {
+			return err
+		}
+	}
+//	fmt.Fprintln(topRightView, "Failures", r.LatestFailures)
+	for _, failure := range r.LatestFailures {
+		fmt.Fprintln(topRightView, failure)
+	}
+	topRightView.Wrap = true
+
+	topProgress, err := g.SetView("topProgress", 0, 3, maxX-1, 5)
+	if err != nil {
+		if err != gocui.ErrorUnkView {
+			return err
+		}
+	}
+	fmt.Fprintln(topProgress, r.LatestProgress)
 
 	titleView, err := g.SetView("titleView", maxX/2-8, 0, maxX/2+8, 2)
 	if err != nil {
@@ -270,7 +321,7 @@ func (r *Reporter) Stop() {
 		r.GUI.Close()
 	}
 
-	fmt.Printf("FINAL STATS: %v", r.LatestData)
+//	fmt.Printf("FINAL STATS: %v", r.LatestData)
 }
 
 func (r *Reporter) quit(g *gocui.Gui, v *gocui.View) error {
