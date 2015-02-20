@@ -30,14 +30,13 @@ type CLIRenderData struct {
 	LatestSummary string
 }
 
-func NewCliRenderer() *RenderCLI {
+func NewRenderCLI() *RenderCLI {
 	return &RenderCLI{
 		Done : make(chan bool),
 	}
 }
 
 type RenderCLI struct {
-	Renderer
 	GUI *gocui.Gui
 	Data CLIRenderData
 	Done chan bool

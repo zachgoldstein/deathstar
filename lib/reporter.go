@@ -8,6 +8,8 @@ type Reporter struct {
 	DataChan chan AggregatedStats
 	Done chan bool
 	Pretty bool
+	RenderHTML bool
+	RenderCLI bool
 
 	mu *sync.Mutex
 	LatestData AggregatedStats
@@ -31,12 +33,20 @@ func NewReporter(dataChan chan AggregatedStats, pretty bool) *Reporter {
 		DataChan : dataChan,
 		Done : make(chan bool),
 		Pretty : pretty,
+		RenderHTML : true, //TEMPORARY
+		RenderCLI : false, //TEMPORARY
 	}
 
-	if (reporter.Pretty) { //TODO: add cli option here
-		reporter.Renderer = NewCliRenderer()
+	//TODO: add support for multiple renderers at one time
+	if reporter.RenderHTML {
+		reporter.Renderer = NewRenderHTML()
+		reporter.Renderer.Setup(reporter.Done)
+
+	} else if reporter.RenderCLI {
+		reporter.Renderer = NewRenderCLI()
 		reporter.Renderer.Setup(reporter.Done)
 	}
+	//TODO: add simple output
 
 	reporter.Start()
 
@@ -54,10 +64,7 @@ func (r *Reporter) chanSetup() {
 		r.mu.Lock()
 		r.LatestData = data
 		r.Renderer.Generate(r.LatestData)
-
-		if (r.Pretty) {
-			r.Renderer.Render()
-		}
+		r.Renderer.Render()
 		r.mu.Unlock()
 	}
 }

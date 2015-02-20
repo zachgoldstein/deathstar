@@ -145,15 +145,11 @@ func GroupFailures(stats []ResponseStats) (failures int, failureGroups map[strin
 
 func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, maxTimeToRespond time.Duration, maxTimeToConnect time.Duration) {
 	maxTotalTimeInt := int64(0)
-	minTotalTimeInt := int64(0)
 	maxTimeToRespondInt := int64(0)
 	maxTimeToConnectInt := int64(0)
-	for index, stat := range stats {
+	for _, stat := range stats {
 		if (stat.TotalTime.Nanoseconds() > maxTotalTimeInt) {
 			maxTotalTimeInt = stat.TotalTime.Nanoseconds()
-		}
-		if (index == 0 || stat.TotalTime.Nanoseconds() < minTotalTimeInt) {
-			minTotalTimeInt = stat.TotalTime.Nanoseconds()
 		}
 
 		if (stat.TimeToConnect.Nanoseconds() > maxTimeToConnectInt) {

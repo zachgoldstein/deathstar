@@ -21,16 +21,16 @@ func DoScaleTest() {
 	responseStatsChan := make(chan ResponseStats)
 	overallStatsChan := make(chan OverallStats)
 
-	maxTestTime := time.Second * 10
+	maxTestTime := time.Second * 180
 
-	spawner := NewSpawner(3, maxTestTime, responseStatsChan, overallStatsChan, reqOpts)
+	spawner := NewSpawner(10, maxTestTime, responseStatsChan, overallStatsChan, reqOpts)
 	accumulator := NewAccumulator(spawner.StatsChan, spawner.OverallStatsChan)
 	spawner.Start()
 
 	reportFrequency := time.Millisecond * 100
 	percentiles := []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999, 0.9999}
 	analyser := NewAnalyser(accumulator, reportFrequency, percentiles)
-	reporter := NewReporter(analyser.StatsChan, true)
+	reporter := NewReporter(analyser.StatsChan, false)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)
