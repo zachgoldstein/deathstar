@@ -26,6 +26,10 @@ type RenderData struct {
 
 	TotalHistogramTimes []float64
 	ConnectionHistogramTimes []float64
+
+	ProgressBarMax int64
+	ProgressBarCurrent int64
+	PercentageComplete string
 }
 
 func NewRenderHTML() *RenderHTML {
@@ -67,11 +71,15 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	for _, latency := range r.Data.Latest.TimeToConnect {
 		r.Data.ConnectionHistogramTimes = append(r.Data.ConnectionHistogramTimes, latency / 1000 / 1000 / 1000)
 	}
+
+	r.Data.ProgressBarMax = r.Data.Latest.TotalTestDuration.Nanoseconds()
+	r.Data.ProgressBarCurrent = r.Data.Latest.TimeElapsed.Nanoseconds()
+	r.Data.PercentageComplete = fmt.Sprintf("%.2f", ( float64(r.Data.ProgressBarCurrent) / float64(r.Data.ProgressBarMax) ) * 100)
 }
 
 func (r *RenderHTML) Render() {
 	htmlTempl := template.New("testResults")
-	templateBytes, err := ioutil.ReadFile("./lib/template.html")
+	templateBytes, err := ioutil.ReadFile("./lib/static/template.html")
 	if (err != nil) {
 		fmt.Printf("err %v \n",err)
 	}
@@ -87,7 +95,6 @@ func (r *RenderHTML) Render() {
 	if (err != nil) {
 		fmt.Printf("err %v \n",err)
 	}
-
 
 	ioutil.WriteFile("./output.html", outputBytes, 0644)
 }

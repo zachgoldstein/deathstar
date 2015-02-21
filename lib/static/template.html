@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Layouts &raquo; Quarter Grid</title>
+    <link rel="stylesheet" type="text/css" href="./lib/static/assets/lib/bootstrap/dist/css/bootstrap.min.css" />
+    <link rel="stylesheet" type="text/css" href="./lib/static/assets/css/keen-dashboards.css" />
+</head>
+<body class="application">
+
+<div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+    <div class="container-fluid">
+        <div class="navbar-header">
+            <a class="navbar-brand" href="https://github.com/zachgoldstein/testscaleman">
+                <span class="glyphicon glyphicon-fire"></span>
+            </a>
+            <a class="navbar-brand" href="https://github.com/zachgoldstein/testscaleman">Testman</a>
+        </div>
+        <div class="navbar-collapse collapse">
+            <ul class="nav navbar-nav navbar-left">
+                <li><a href="https://github.com/zachgoldstein/testscaleman">Source</a></li>
+            </ul>
+            <ul class="nav navbar-nav navbar-right">
+                <li><a href="https://github.com/zachgoldstein/testscaleman">Started test at: {{.Latest.StartTime}}</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid">
+
+<div class="row">
+    <div class="col-sm-12 col-md-12">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Load Test Progress
+            </div>
+            <div class="chart-stage">
+                <div class="progress">
+                    <div class="progress-bar progress-bar-info progress-bar-striped active" role="progressbar" aria-valuenow="{{.ProgressBarCurrent}}" aria-valuemin="0" aria-valuemax="{{.ProgressBarMax}}" style="width: {{.PercentageComplete}}%;">
+                        <span style="color: black;">{{.PercentageComplete}}%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="chart-notes">
+                <p>Time Elapsed: {{.Latest.TimeElapsed}}
+                    <span class="pull-right">Test Length: {{.Latest.TotalTestDuration}}</span>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-sm-6 col-md-6">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Yield
+            </div>
+            <div class="chart-stage">
+                <h1>???</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-6">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Harvest
+            </div>
+            <div class="chart-stage">
+                <h1>???</h1>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-sm-6 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Total Requests Issued
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.TotalRequests}}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Total Responses Received
+            </div>
+            <div class="chart-stage">
+                <h1>???</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Failures
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.Failures}}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Maximum Response Time
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.MaxTotalTime}}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Average Response Time
+            </div>
+            <div class="chart-stage text-center">
+                <h1>???</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Minimum Response Time
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.MinTotalTime}}</h1>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Total Latency Percentiles
+            </div>
+            <div class="chart-stage">
+                <div id="totalResponseCht"></div>
+            </div>
+            <div class="chart-notes">
+                (Latencies in seconds)
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Connection Latency Percentiles
+            </div>
+            <div class="chart-stage">
+                <div id="connectCht"></div>
+            </div>
+            <div class="chart-notes">
+                (Latencies in seconds)
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Total Latency Histogram
+            </div>
+            <div class="chart-stage">
+                <div id="totalHist"></div>
+            </div>
+            <div class="chart-notes">
+                (Latencies in seconds)
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Connection Latency Histogram
+            </div>
+            <div class="chart-stage">
+                <div id="connHist"></div>
+            </div>
+            <div class="chart-notes">
+                (Latencies in seconds)
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-sm-12 col-md-4">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Failures
+            </div>
+            <div class="chart-stage">
+                <table class="table table-bordered">
+                    <thead>
+                    <tr>
+                        <th># Failures</th>
+                        <th>Failure Type</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {{range $error, $count := .Latest.FailureCounts}}
+                    <tr>
+                        <td>{{$count}}</td>
+                        <td>{{$error}}</td>
+                    </tr>
+                    {{end}}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-12 col-md-4">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Requests
+            </div>
+            <div class="chart-stage">
+                <img data-src="holder.js/100%x500/white">
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-12 col-md-4">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Responses
+            </div>
+            <div class="chart-stage">
+                <img data-src="holder.js/100%x500/white">
+            </div>
+        </div>
+    </div>
+</div>
+
+<hr>
+
+<p class="small text-muted">Built with &#9829; by Zach Goldstein using <a href="https://keen.io">Keen IO</a></p>
+
+</div>
+
+<script type="text/javascript" src="./lib/static/assets/lib/jquery/dist/jquery.min.js"></script>
+<script type="text/javascript" src="./lib/static/assets/lib/bootstrap/dist/js/bootstrap.min.js"></script>
+
+<script type="text/javascript" src="./lib/static/assets/lib/holderjs/holder.js"></script>
+<script>
+    Holder.add_theme("white", { background:"#fff", foreground:"#a7a7a7", size:10 });
+  </script>
+
+<script type="text/javascript" src="./lib/static/assets/lib/keen-js/dist/keen.min.js"></script>
+<script type="text/javascript" src="./lib/static/assets/js/meta.js"></script>
+
+<script type="text/javascript" src="https://www.google.com/jsapi"></script>
+<script>
+    google.load('visualization', '1', {packages: ['corechart']});
+    google.setOnLoadCallback(drawCharts);
+
+    function drawCharts() {
+      percentiles = [
+        {{range .Latest.Percentiles}}
+            {{.}},
+        {{end}}
+      ]
+      var options = {
+        hAxis: {
+          title: 'Percentiles'
+        },
+        vAxis: {
+          title: 'Latency(s)'
+        },
+        legend: {position: 'none'},
+      };
+
+      var totalPercentiles = new google.visualization.DataTable();
+      totalPercentiles.addColumn('string', 'Total Percentiles');
+      totalPercentiles.addColumn('number', 'Latency (s)');
+
+      totalPercentiles.addRows([
+        {{range $index, $total := .LatestTotalPercentiles}}
+            [ percentiles[ {{$index}} ] * 100 + "" ,{{$total}}],
+        {{end}}
+      ]);
+
+      var chart = new google.visualization.LineChart( document.getElementById('totalResponseCht') );
+      chart.draw(totalPercentiles, options);
+
+      var connectionPercentiles = new google.visualization.DataTable();
+      connectionPercentiles.addColumn('string', 'Total Percentiles');
+      connectionPercentiles.addColumn('number', 'Latency (s)');
+
+      connectionPercentiles.addRows([
+        {{range $index, $total := .LatestConnectPercentiles}}
+            [ percentiles[ {{$index}} ] * 100 + "" ,{{$total}}],
+        {{end}}
+      ]);
+
+      var chart = new google.visualization.LineChart( document.getElementById('connectCht') );
+      chart.draw(connectionPercentiles, options);
+
+
+      var options = {
+        hAxis: {
+          title: 'Latency(s)'
+        },
+        vAxis: {
+          title: 'Count'
+        },
+        legend: {position: 'none'},
+      };
+
+      var data = google.visualization.arrayToDataTable(
+        [
+            ['Latencies'],
+            {{range $index, $total := .TotalHistogramTimes}}
+                [{{$total}}],
+            {{end}}
+        ]
+      );
+
+        var chart = new google.visualization.Histogram(document.getElementById('totalHist'));
+        chart.draw(data, options);
+
+      var options = {
+        hAxis: {
+          title: 'Latency(s)'
+        },
+        vAxis: {
+          title: 'Count'
+        },
+        chartArea: {
+           height: '40%'
+        },
+        legend: {position: 'none'},
+      };
+
+      var data = google.visualization.arrayToDataTable(
+        [
+            ['Latencies'],
+            {{range $index, $total := .ConnectionHistogramTimes}}
+                [{{$total}}],
+            {{end}}
+        ]
+      );
+
+        var chart = new google.visualization.Histogram(document.getElementById('connHist'));
+        chart.draw(data, options);
+
+
+    }
+</script>
+
+</body>
+</html>
