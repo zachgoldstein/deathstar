@@ -33,8 +33,8 @@ func NewReporter(dataChan chan AggregatedStats, pretty bool) *Reporter {
 		DataChan : dataChan,
 		Done : make(chan bool),
 		Pretty : pretty,
-		RenderHTML : true, //TEMPORARY
-		RenderCLI : false, //TEMPORARY
+		RenderHTML : true,
+		RenderCLI : false,
 	}
 
 	//TODO: add support for multiple renderers at one time
