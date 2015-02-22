@@ -30,6 +30,13 @@ type RenderData struct {
 	ProgressBarMax int64
 	ProgressBarCurrent int64
 	PercentageComplete string
+
+	MaxResponseTime string
+	AvgResponseTime string
+	MinResponseTime string
+
+	Yield string
+	Harvest string
 }
 
 func NewRenderHTML() *RenderHTML {
@@ -75,6 +82,10 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	r.Data.ProgressBarMax = r.Data.Latest.TotalTestDuration.Nanoseconds()
 	r.Data.ProgressBarCurrent = r.Data.Latest.TimeElapsed.Nanoseconds()
 	r.Data.PercentageComplete = fmt.Sprintf("%.2f", ( float64(r.Data.ProgressBarCurrent) / float64(r.Data.ProgressBarMax) ) * 100)
+
+	r.Data.Yield = fmt.Sprintf("%.2f", r.Data.Latest.Yield)
+	r.Data.Harvest = fmt.Sprintf("%.2f", r.Data.Latest.Harvest)
+	r.Data.MaxResponseTime = fmt.Sprintf("%.2f", r.Data.Latest.MaxTotalTime.Seconds())
 }
 
 func (r *RenderHTML) Render() {

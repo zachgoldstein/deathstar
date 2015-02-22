@@ -49,7 +49,7 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 
 	r.RequestTime = r.TotalTime - r.ConnectionTime
 
-	valid, failCategory, err := r.validateResponse(resp, r.RequestOptions.JSONSchema)
+	valid, validationErr, respErr, failCategory, err := r.validateResponse(resp, r.RequestOptions.JSONSchema)
 
 	reqBody, respBody, err := r.isolatePayloads(req, resp)
 
@@ -58,6 +58,8 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 		TimeToRespond: r.RequestTime,
 		TotalTime: r.TotalTime,
 		Failure : !valid,
+		ValidationErr : validationErr,
+		RespErr : respErr,
 		FailCategory : failCategory,
 		ReqPayload : reqBody,
 		RespPayload : respBody,
@@ -124,25 +126,25 @@ func (r *RequestRecorder) isolatePayloads (req *http.Request, resp *http.Respons
 	return string(reqPayload), string(respPayload), err
 }
 
-func (r *RequestRecorder) validateResponse (resp *http.Response, schema string) (valid bool, failCategory string, err error) {
+func (r *RequestRecorder) validateResponse (resp *http.Response, schema string) (valid bool, validationErr bool, respErr bool, failCategory string, err error) {
 	respDump, err := httputil.DumpResponse(resp, true)
 	Log("debug", "DEBUGGING RAW RESPONSE ================== /n ",string(respDump), " /n ==================")
 
 	if resp.StatusCode != 200 {
-		return false, resp.Status, nil
+		return false, false, true, resp.Status, nil
 	}
 
 	defer resp.Body.Close()
 	respPayload, err := ioutil.ReadAll(resp.Body)
 	if (err != nil) {
-		return false, "", err
+		return false, false, true, "Cannot Read Body", err
 	}
 
 	responseLoader := gojsonschema.NewStringLoader(string(respPayload))
 	schemaLoader := gojsonschema.NewStringLoader(schema)
 	res, err := gojsonschema.Validate(schemaLoader, responseLoader)
 	if (err != nil) {
-		return false, err.Error(), err
+		return false, true, false, err.Error(), err
 	}
 
 	Log("debug", "VALID RESPONSE? ",res)
@@ -150,14 +152,12 @@ func (r *RequestRecorder) validateResponse (resp *http.Response, schema string) 
 	if !res.Valid() {
 		errors := []string{}
 		for _, validateError := range res.Errors() {
-			errors = append(errors, fmt.Sprint(validateError))
+			errors = append(errors, fmt.Sprintf("Validation Error: %v", validateError))
 		}
 		sort.Strings(errors)
 
-		return false, fmt.Sprint(errors), nil
+		return false, true, false, fmt.Sprint(errors), nil
 	}
 
-
-
-	return true, "", nil
+	return true, false, false, "", nil
 }

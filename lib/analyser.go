@@ -27,6 +27,9 @@ type AggregatedStats struct {
 	AvgConcurrentExecutors int
 	MaxConcurrentExecutors int
 
+	Yield float64
+	Harvest float64
+
 	//TODO: add a measure of the actual req/s the system is executing, avg, max, min
 
 	Percentiles []float64
@@ -94,10 +97,38 @@ func (a *Analyser) Analyse() {
 
 			stats.TimeToRespond, stats.TimeToConnect, stats.TotalTime = extractLatencies(a.Accumulator.Stats)
 
+			stats.Harvest = Harvest(a.Accumulator.Stats)
+
+			stats.Yield = Yield(a.Accumulator.Stats)
+
 			Log("analyse", fmt.Sprintln("Performed analysis and sent to channel ",stats, " ConcurrentExecutors Avg ",stats.AvgConcurrentExecutors, " Max ",stats.MaxConcurrentExecutors) )
 			a.StatsChan <- stats
 		}
 	}()
+}
+
+func Harvest(stats []ResponseStats) float64 {
+	numRequests := len(stats)
+	if (numRequests == 0) { return 0.0}
+	numResponses := 0
+	for _, stat := range stats {
+		if (!stat.RespErr) {
+			numResponses += 1
+		}
+	}
+	return float64(numResponses)/float64(numRequests) * 100
+}
+
+func Yield(stats []ResponseStats) float64 {
+	numRequests := len(stats)
+	if (numRequests== 0) { return 0.0}
+	validResponses := 0
+	for _, stat := range stats {
+		if (!stat.ValidationErr && !stat.Failure) {
+			validResponses += 1
+		}
+	}
+	return float64(validResponses)/float64(numRequests) * 100
 }
 
 func DetermineOverallTimes(overallStats []OverallStats) (startTime time.Time, timeElapsed time.Duration, totalTestDuration time.Duration)  {

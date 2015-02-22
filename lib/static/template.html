@@ -54,20 +54,26 @@
     <div class="col-sm-6 col-md-6">
         <div class="chart-wrapper">
             <div class="chart-title">
-                Yield
+                Harvest
             </div>
             <div class="chart-stage">
-                <h1>???</h1>
+                <h1>{{.Harvest}}%</h1>
+            </div>
+            <div class="chart-notes">
+                Percentage of requests with 200 responses
             </div>
         </div>
     </div>
     <div class="col-sm-6 col-md-6">
         <div class="chart-wrapper">
             <div class="chart-title">
-                Harvest
+                Yield
             </div>
             <div class="chart-stage">
-                <h1>???</h1>
+                <h1>{{.Yield}}%</h1>
+            </div>
+            <div class="chart-notes">
+                Percentage of responses that validate against schema
             </div>
         </div>
     </div>
@@ -110,7 +116,7 @@
                 Maximum Response Time
             </div>
             <div class="chart-stage text-center">
-                <h1>{{.Latest.MaxTotalTime}}</h1>
+                <h1>{{.MaxResponseTime}}s</h1>
             </div>
         </div>
     </div>

@@ -33,6 +33,8 @@ type ResponseStats struct {
 	ResponsePayload []byte
 	Failure bool
 	FailCategory string
+	ValidationErr bool
+	RespErr bool
 	ReqPayload string
 	RespPayload string
 }
