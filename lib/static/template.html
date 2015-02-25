@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Layouts &raquo; Quarter Grid</title>
+    <title>Testman Results</title>
     <link rel="stylesheet" type="text/css" href="./lib/static/assets/lib/bootstrap/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" type="text/css" href="./lib/static/assets/css/keen-dashboards.css" />
 </head>
@@ -80,7 +80,7 @@
 </div>
 
 <div class="row">
-    <div class="col-sm-6 col-md-2">
+    <div class="col-sm-4 col-md-2">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Total Requests Issued
@@ -90,17 +90,27 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-md-2">
+    <div class="col-sm-4 col-md-2">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Total Responses Received
             </div>
-            <div class="chart-stage">
-                <h1>???</h1>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.TotalResponses}}</h1>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-md-2">
+    <div class="col-sm-4 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Valid Responses
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.TotalValidResponses}}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4 col-md-2">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Failures
@@ -110,7 +120,30 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-md-2">
+    <div class="col-sm-4 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Non-200 Status Code Failures
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.RespFailures}}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4 col-md-2">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Response Validation Failures
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.ValidationFailures}}</h1>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-sm-4 col-md-4">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Maximum Response Time
@@ -120,23 +153,23 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-md-2">
+    <div class="col-sm-4 col-md-4">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Average Response Time
             </div>
             <div class="chart-stage text-center">
-                <h1>???</h1>
+                <h1>{{.AvgResponseTime}}s</h1>
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-md-2">
+    <div class="col-sm-4 col-md-4">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Minimum Response Time
             </div>
             <div class="chart-stage text-center">
-                <h1>{{.Latest.MinTotalTime}}</h1>
+                <h1>{{.MinResponseTime}}s</h1>
             </div>
         </div>
     </div>

@@ -24,6 +24,8 @@ type AggregatedStats struct {
 	TimeElapsed time.Duration
 
 	TotalRequests int
+	TotalResponses int
+	TotalValidResponses int
 	AvgConcurrentExecutors int
 	MaxConcurrentExecutors int
 
@@ -36,6 +38,7 @@ type AggregatedStats struct {
 
 	TotalTimePercentiles []time.Duration
 	MaxTotalTime time.Duration
+	MeanTotalTime time.Duration
 	MinTotalTime time.Duration
 
 	TimeToRespondPercentiles []time.Duration
@@ -45,6 +48,8 @@ type AggregatedStats struct {
 	MaxTimeToConnect time.Duration
 
 	Failures int
+	RespFailures int
+	ValidationFailures int
 	FailureCounts map[string]int
 
 	TimeToRespond []float64
@@ -87,19 +92,23 @@ func (a *Analyser) Analyse() {
 
 			stats.MinTotalTime = DetermineMinLatencies(a.Accumulator.Stats)
 
-			stats.TotalRequests = len(a.Accumulator.Stats)
+			stats.MeanTotalTime = MeanLatencies(a.Accumulator.Stats)
 
 			stats.AvgConcurrentExecutors = AverageConcurrency(a.Accumulator.OverallStats)
 
 			stats.MaxConcurrentExecutors = MaxConcurrency(a.Accumulator.OverallStats)
 
-			stats.Failures, stats.FailureCounts = GroupFailures(a.Accumulator.Stats)
+			stats.Failures, stats.RespFailures, stats.ValidationFailures, stats.FailureCounts = GroupFailures(a.Accumulator.Stats)
 
 			stats.TimeToRespond, stats.TimeToConnect, stats.TotalTime = extractLatencies(a.Accumulator.Stats)
 
-			stats.Harvest = Harvest(a.Accumulator.Stats)
+			stats.TotalResponses = NumResponses(a.Accumulator.Stats)
+			stats.TotalRequests = a.Accumulator.OverallStats[len(a.Accumulator.OverallStats) - 1].NumRequests
 
-			stats.Yield = Yield(a.Accumulator.Stats)
+			stats.TotalValidResponses = ValidResponses(a.Accumulator.Stats)
+
+			stats.Harvest = Harvest(stats.TotalResponses, stats.TotalRequests)
+			stats.Yield = Yield(stats.TotalResponses, stats.TotalValidResponses)
 
 			Log("analyse", fmt.Sprintln("Performed analysis and sent to channel ",stats, " ConcurrentExecutors Avg ",stats.AvgConcurrentExecutors, " Max ",stats.MaxConcurrentExecutors) )
 			a.StatsChan <- stats
@@ -107,28 +116,36 @@ func (a *Analyser) Analyse() {
 	}()
 }
 
-func Harvest(stats []ResponseStats) float64 {
-	numRequests := len(stats)
+func Harvest(numResponses int, numRequests int) float64 {
 	if (numRequests == 0) { return 0.0}
-	numResponses := 0
-	for _, stat := range stats {
-		if (!stat.RespErr) {
-			numResponses += 1
-		}
-	}
 	return float64(numResponses)/float64(numRequests) * 100
 }
 
-func Yield(stats []ResponseStats) float64 {
-	numRequests := len(stats)
-	if (numRequests== 0) { return 0.0}
+func ValidResponses(stats []ResponseStats) int {
 	validResponses := 0
 	for _, stat := range stats {
 		if (!stat.ValidationErr && !stat.Failure) {
 			validResponses += 1
 		}
 	}
-	return float64(validResponses)/float64(numRequests) * 100
+	return validResponses
+}
+
+func Yield(numResponses int, validResponses int) float64 {
+	if (numResponses == 0) { return 0.0}
+	return float64(validResponses)/float64(numResponses) * 100
+}
+
+func NumResponses(stats []ResponseStats) int {
+	numRequests := len(stats)
+	if (numRequests == 0) { return 0}
+	numResponses := 0
+	for _, stat := range stats {
+		if (!stat.RespErr) {
+			numResponses += 1
+		}
+	}
+	return numResponses
 }
 
 func DetermineOverallTimes(overallStats []OverallStats) (startTime time.Time, timeElapsed time.Duration, totalTestDuration time.Duration)  {
@@ -158,10 +175,13 @@ func MaxConcurrency(stats []OverallStats) int {
 	return max
 }
 
-func GroupFailures(stats []ResponseStats) (failures int, failureGroups map[string]int) {
+func GroupFailures(stats []ResponseStats) (failures int, respErrs int, validationErrs int, failureGroups map[string]int) {
 	failureGroups = make(map[string]int)
 	for _, stat := range stats {
 		if stat.Failure {
+			if stat.RespErr { respErrs += 1}
+			if stat.ValidationErr { validationErrs += 1}
+
 			failures += 1
 			if fails, ok := failureGroups[stat.FailCategory]; ok {
 				failureGroups[stat.FailCategory] = fails + 1
@@ -171,7 +191,7 @@ func GroupFailures(stats []ResponseStats) (failures int, failureGroups map[strin
 		}
 	}
 	Log("analyse", fmt.Sprintln("Grouped ",failures, " failures into map, ",failureGroups) )
-	return failures, failureGroups
+	return
 }
 
 func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, maxTimeToRespond time.Duration, maxTimeToConnect time.Duration) {
@@ -179,6 +199,8 @@ func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, m
 	maxTimeToRespondInt := int64(0)
 	maxTimeToConnectInt := int64(0)
 	for _, stat := range stats {
+		if (stat.RespErr) { continue }
+
 		if (stat.TotalTime.Nanoseconds() > maxTotalTimeInt) {
 			maxTotalTimeInt = stat.TotalTime.Nanoseconds()
 		}
@@ -186,6 +208,7 @@ func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, m
 		if (stat.TimeToConnect.Nanoseconds() > maxTimeToConnectInt) {
 			maxTimeToConnectInt = stat.TimeToConnect.Nanoseconds()
 		}
+
 		if (stat.TimeToRespond.Nanoseconds() > maxTimeToRespondInt) {
 			maxTimeToRespondInt = stat.TimeToRespond.Nanoseconds()
 		}
@@ -199,14 +222,29 @@ func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, m
 
 func DetermineMinLatencies(stats []ResponseStats) (minTotalTime time.Duration) {
 	minTotalTimeInt := int64(0)
-	for index, stat := range stats {
-		if (index == 0 || stat.TotalTime.Nanoseconds() < minTotalTimeInt) {
+	for _, stat := range stats {
+		if (stat.RespErr) { continue }
+		if (minTotalTimeInt == 0 || stat.TotalTime.Nanoseconds() < minTotalTimeInt) {
 			minTotalTimeInt = stat.TotalTime.Nanoseconds()
 		}
 	}
 
 	minTotalTime = time.Duration(minTotalTimeInt) * time.Nanosecond
 	return
+}
+
+func MeanLatencies(stats []ResponseStats) (meanTotalTime time.Duration) {
+	totalLatency := int64(0)
+	numSuccesses := 0
+	for _, stat := range stats {
+		if (stat.RespErr) { continue }
+		numSuccesses += 1
+		totalLatency += stat.TotalTime.Nanoseconds()
+	}
+	if (numSuccesses == 0 ) {return time.Second * time.Duration(0)}
+	meanLatency := totalLatency / int64( numSuccesses )
+
+	return time.Duration(meanLatency) * time.Nanosecond
 }
 
 func DeterminePercentilesLatencies(percentiles []float64, stats []ResponseStats) (TimeToConnectPercentiles, TimeToRespondPercentiles, TotalTimePercentiles []time.Duration) {

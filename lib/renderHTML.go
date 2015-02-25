@@ -86,6 +86,8 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	r.Data.Yield = fmt.Sprintf("%.2f", r.Data.Latest.Yield)
 	r.Data.Harvest = fmt.Sprintf("%.2f", r.Data.Latest.Harvest)
 	r.Data.MaxResponseTime = fmt.Sprintf("%.2f", r.Data.Latest.MaxTotalTime.Seconds())
+	r.Data.MinResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MinTotalTime.Seconds())
+	r.Data.AvgResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MeanTotalTime.Seconds())
 }
 
 func (r *RenderHTML) Render() {

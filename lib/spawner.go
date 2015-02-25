@@ -4,6 +4,7 @@ import (
 	"time"
 	"fmt"
 	"net/http"
+	"sync"
 )
 
 //Spawner is responsible for initiating requests on a channel at a specific rate
@@ -16,6 +17,7 @@ type Spawner struct {
 	StartTime time.Time
 
 	RequestChan chan bool
+
 	StatsChan chan ResponseStats
 	OverallStatsChan chan OverallStats
 	Done chan bool
@@ -24,6 +26,9 @@ type Spawner struct {
 	RequestOptions RequestOptions
 	Started bool
 	CustomClient *http.Client
+
+	mu sync.Mutex
+	NumRequests int
 }
 
 type ResponseStats struct {
@@ -43,6 +48,8 @@ type OverallStats struct {
 	StartTime time.Time
 	TotalTestDuration time.Duration
 	TimeElapsed time.Duration
+
+	NumRequests int
 
 	NumExecutors int
 	NumBusyExecutors int
@@ -109,6 +116,7 @@ func (s *Spawner) SendOverallStats() {
 	overallStats := OverallStats {
 		NumExecutors : len(s.ExecutorPool),
 		StartTime : s.StartTime,
+		NumRequests : s.NumRequests,
 	}
 
 	for _, executor := range s.ExecutorPool {
@@ -135,7 +143,6 @@ func (s *Spawner) MakeRequests() {
 			numAvailableExecutors += 1
 		}
 	}
-
 	if numAvailableExecutors < int(s.Rate) {
 		numToAdd := int(s.Rate) - numAvailableExecutors
 		Log("spawn", fmt.Sprintln("Adding ",numToAdd," executors to pool") )
@@ -162,9 +169,12 @@ func (s *Spawner) MakeRequests() {
 		}
 	}
 
+	s.mu.Lock()
 	for i:= 0; i < int(s.Rate); i++ {
+		s.NumRequests += 1
 		s.RequestChan <- true
 	}
+	s.mu.Unlock()
 }
 
 func (s *Spawner) HasCustomClient() bool {
