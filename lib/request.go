@@ -28,11 +28,22 @@ func NewRequestRecorder (reqOpts RequestOptions) *RequestRecorder {
 
 func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 
-	now := time.Now()
+	startTime := time.Now()
 
 	req, err := r.constructRequest()
+	req.Close = true
 	if (err != nil) {
-		issueError(err)
+		return ResponseStats {
+			TimeToConnect: r.ConnectionTime,
+			TimeToRespond: r.RequestTime,
+			TotalTime: r.TotalTime,
+			StartTime: startTime,
+			FinishTime: time.Now(),
+			Failure : true,
+			ValidationErr : false,
+			RespErr : true,
+			FailCategory : err.Error(),
+		}, err
 	}
 
 	client := r.createHttpClient()
@@ -42,21 +53,34 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 
 	resp, err := r.issueRequest(req, client)
 	if (err != nil) {
-		issueError(err)
+		return ResponseStats {
+			TimeToConnect: r.ConnectionTime,
+			TimeToRespond: r.RequestTime,
+			TotalTime: r.TotalTime,
+			StartTime: startTime,
+			FinishTime: time.Now(),
+			Failure : true,
+			ValidationErr : false,
+			RespErr : true,
+			FailCategory : err.Error(),
+		}, err
 	}
+	finishTime := time.Now()
 
-	r.TotalTime = time.Since(now)
+	r.TotalTime = time.Since(startTime)
 
 	r.RequestTime = r.TotalTime - r.ConnectionTime
 
-	valid, validationErr, respErr, failCategory, err := r.validateResponse(resp, r.RequestOptions.JSONSchema)
-
 	reqBody, respBody, err := r.isolatePayloads(req, resp)
+
+	valid, validationErr, respErr, failCategory, err := r.validateResponse(respBody, resp, r.RequestOptions.JSONSchema)
 
 	return ResponseStats {
 		TimeToConnect: r.ConnectionTime,
 		TimeToRespond: r.RequestTime,
 		TotalTime: r.TotalTime,
+		StartTime: startTime,
+		FinishTime: finishTime,
 		Failure : !valid,
 		ValidationErr : validationErr,
 		RespErr : respErr,
@@ -109,6 +133,10 @@ func (r *RequestRecorder) HasCustomClient() bool {
 }
 
 func (r *RequestRecorder) isolatePayloads (req *http.Request, resp *http.Response) (reqPayload string, respPayload string, err error) {
+
+	respDump, err := httputil.DumpResponse(resp, true)
+	Log("debug", "DEBUGGING RAW RESPONSE ================== /n ",string(respDump), " /n ==================")
+
 	defer resp.Body.Close()
 	respPayloadBytes, err := ioutil.ReadAll(resp.Body)
 	respPayload = string(respPayloadBytes)
@@ -126,21 +154,12 @@ func (r *RequestRecorder) isolatePayloads (req *http.Request, resp *http.Respons
 	return string(reqPayload), string(respPayload), err
 }
 
-func (r *RequestRecorder) validateResponse (resp *http.Response, schema string) (valid bool, validationErr bool, respErr bool, failCategory string, err error) {
-	respDump, err := httputil.DumpResponse(resp, true)
-	Log("debug", "DEBUGGING RAW RESPONSE ================== /n ",string(respDump), " /n ==================")
-
+func (r *RequestRecorder) validateResponse(respPayload string, resp *http.Response, schema string) (valid bool, validationErr bool, respErr bool, failCategory string, err error) {
 	if resp.StatusCode != 200 {
 		return false, false, true, resp.Status, nil
 	}
 
-	defer resp.Body.Close()
-	respPayload, err := ioutil.ReadAll(resp.Body)
-	if (err != nil) {
-		return false, false, true, "Cannot Read Body", err
-	}
-
-	responseLoader := gojsonschema.NewStringLoader(string(respPayload))
+	responseLoader := gojsonschema.NewStringLoader(respPayload)
 	schemaLoader := gojsonschema.NewStringLoader(schema)
 	res, err := gojsonschema.Validate(schemaLoader, responseLoader)
 	if (err != nil) {

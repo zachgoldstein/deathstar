@@ -33,10 +33,16 @@ type RenderData struct {
 
 	MaxResponseTime string
 	AvgResponseTime string
+	TopPercentileTime string
+	TopPercentileTimeTitle string
 	MinResponseTime string
 
 	Yield string
 	Harvest string
+
+	ThroughputKbs float64
+	AvgThroughputKbs string
+	AvgThroughputResps string
 }
 
 func NewRenderHTML() *RenderHTML {
@@ -85,9 +91,16 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 
 	r.Data.Yield = fmt.Sprintf("%.2f", r.Data.Latest.Yield)
 	r.Data.Harvest = fmt.Sprintf("%.2f", r.Data.Latest.Harvest)
-	r.Data.MaxResponseTime = fmt.Sprintf("%.2f", r.Data.Latest.MaxTotalTime.Seconds())
+
+	r.Data.MaxResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MaxTotalTime.Seconds())
 	r.Data.MinResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MinTotalTime.Seconds())
 	r.Data.AvgResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MeanTotalTime.Seconds())
+	r.Data.TopPercentileTimeTitle = r.Data.PercentileTitles[len(r.Data.PercentileTitles) - 1]
+	r.Data.TopPercentileTime = fmt.Sprintf("%.4f", r.Data.LatestTotalPercentiles[len(r.Data.LatestTotalPercentiles) - 1])
+
+	r.Data.ThroughputKbs = r.Data.Latest.LatestByteThroughput / 1000.0
+	r.Data.AvgThroughputKbs = fmt.Sprintf("%.4f", r.Data.Latest.AverageByteThroughput / 1000.0)
+	r.Data.AvgThroughputResps = fmt.Sprintf("%.4f", r.Data.Latest.AverageRespThroughput)
 }
 
 func (r *RenderHTML) Render() {
@@ -117,11 +130,18 @@ func (r *RenderHTML)Quit() {
 }
 
 func (r *RenderHTML) GeneratePercentiles(stats AggregatedStats) (connectOutput, totalOutput, responseOutput []float64){
-	if (stats.TotalRequests == 0){
+	if (stats.TotalRequests == 0 ){
 		return connectOutput, totalOutput, responseOutput
 	}
-
 	for index, _ := range stats.Percentiles {
+
+		//TODO: Hack to deal with issue in percentile generation.... fix that.
+		if (len(stats.TimeToConnectPercentiles) -1 < index ||
+			len(stats.TotalTimePercentiles) -1 < index ||
+			len(stats.TimeToRespondPercentiles) -1 < index ) {
+			break
+		}
+
 		connectOutput = append(connectOutput, stats.TimeToConnectPercentiles[index].Seconds() )
 		totalOutput = append(totalOutput, stats.TotalTimePercentiles[index].Seconds() )
 		responseOutput = append(responseOutput, stats.TimeToRespondPercentiles[index].Seconds() )

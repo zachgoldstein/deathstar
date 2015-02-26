@@ -80,7 +80,7 @@
 </div>
 
 <div class="row">
-    <div class="col-sm-4 col-md-2">
+    <div class="col-sm-4 col-md-4">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Total Requests Issued
@@ -90,7 +90,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4 col-md-2">
+    <div class="col-sm-4 col-md-4">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Total Responses Received
@@ -100,7 +100,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4 col-md-2">
+    <div class="col-sm-4 col-md-4">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Valid Responses
@@ -110,40 +110,90 @@
             </div>
         </div>
     </div>
+</div>
+
+<div class="row">
     <div class="col-sm-4 col-md-2">
         <div class="chart-wrapper">
             <div class="chart-title">
-                Failures
+                Req Rate
             </div>
             <div class="chart-stage text-center">
-                <h1>{{.Latest.Failures}}</h1>
+                <h2>{{.Latest.Rate}}req/sec</h2>
             </div>
         </div>
     </div>
     <div class="col-sm-4 col-md-2">
         <div class="chart-wrapper">
             <div class="chart-title">
-                Non-200 Status Code Failures
+                Current Throughput (kb/s)
             </div>
             <div class="chart-stage text-center">
-                <h1>{{.Latest.RespFailures}}</h1>
+                <h2>{{.ThroughputKbs}}kb/sec</h2>
             </div>
         </div>
     </div>
     <div class="col-sm-4 col-md-2">
         <div class="chart-wrapper">
             <div class="chart-title">
-                Response Validation Failures
+                Current Throughput (resp/s)
             </div>
             <div class="chart-stage text-center">
-                <h1>{{.Latest.ValidationFailures}}</h1>
+                <h2>{{.Latest.LatestRespThroughput}} resp/s</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Mean Throughput (resp/s)
+            </div>
+            <div class="chart-stage text-center">
+                <h2>{{.AvgThroughputResps}} resp/s</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Mean Throughput (kb/s)
+            </div>
+            <div class="chart-stage text-center">
+                <h2>{{.AvgThroughputKbs}}kb/sec</h2>
+            </div>
+        </div>
+    </div>
+
+ </div>
+
+<div class="row">
+
+    <div class="col-sm-6 col-md-6">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Throughput Over Time (resp/s)
+            </div>
+            <div class="chart-stage">
+                <div id="throughputRespTime"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-sm-6 col-md-6">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Throughput Over Time (kb/s)
+            </div>
+            <div class="chart-stage">
+                <div id="throughputBytesTime"></div>
             </div>
         </div>
     </div>
 </div>
 
+
 <div class="row">
-    <div class="col-sm-4 col-md-4">
+    <div class="col-sm-4 col-md-3">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Maximum Response Time
@@ -153,7 +203,7 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4 col-md-4">
+    <div class="col-sm-4 col-md-3">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Average Response Time
@@ -163,7 +213,17 @@
             </div>
         </div>
     </div>
-    <div class="col-sm-4 col-md-4">
+    <div class="col-sm-4 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                {{.TopPercentileTimeTitle}} Response Time
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.TopPercentileTime}}s</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4 col-md-3">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Minimum Response Time
@@ -231,7 +291,40 @@
 </div>
 
 <div class="row">
-    <div class="col-sm-12 col-md-4">
+    <div class="col-sm-4 col-md-4">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Failures
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.Failures}}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4 col-md-4">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Non-200 Status Code Failures
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.RespFailures}}</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-4 col-md-4">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Response Validation Failures
+            </div>
+            <div class="chart-stage text-center">
+                <h1>{{.Latest.ValidationFailures}}</h1>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-sm-12 col-md-12">
         <div class="chart-wrapper">
             <div class="chart-title">
                 Failures
@@ -253,26 +346,6 @@
                     {{end}}
                     </tbody>
                 </table>
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-12 col-md-4">
-        <div class="chart-wrapper">
-            <div class="chart-title">
-                Requests
-            </div>
-            <div class="chart-stage">
-                <img data-src="holder.js/100%x500/white">
-            </div>
-        </div>
-    </div>
-    <div class="col-sm-12 col-md-4">
-        <div class="chart-wrapper">
-            <div class="chart-title">
-                Responses
-            </div>
-            <div class="chart-stage">
-                <img data-src="holder.js/100%x500/white">
             </div>
         </div>
     </div>
@@ -356,9 +429,7 @@
       var data = google.visualization.arrayToDataTable(
         [
             ['Latencies'],
-            {{range $index, $total := .TotalHistogramTimes}}
-                [{{$total}}],
-            {{end}}
+            {{range $index, $total := .TotalHistogramTimes}} [{{$total}}], {{end}}
         ]
       );
 
@@ -390,6 +461,62 @@
         var chart = new google.visualization.Histogram(document.getElementById('connHist'));
         chart.draw(data, options);
 
+
+      var throughputResp = new google.visualization.DataTable();
+      throughputResp.addColumn('string', 'Time');
+      throughputResp.addColumn('number', 'Resp/s');
+
+      throughputResp.addRows([
+        {{range $index, $resps := .Latest.RespThroughputs}} [ "{{$index}}s",{{$resps}}], {{end}}
+      ]);
+
+      var options = {
+        hAxis: {
+          textPosition: 'none',
+            gridlines: {
+                color: 'transparent'
+            },
+        },
+        vAxis: {
+            baselineColor: 'transparent',
+            gridlines: {
+                color: 'transparent'
+            },
+        },
+        height: 100,
+        legend: {position: 'none'},
+      }
+
+      var chart = new google.visualization.LineChart( document.getElementById('throughputRespTime') );
+      chart.draw(throughputResp, options);
+
+      var throughputBytes = new google.visualization.DataTable();
+      throughputBytes.addColumn('string', 'Time');
+      throughputBytes.addColumn('number', 'kb/s');
+
+      throughputBytes.addRows([
+        {{range $index, $bytes := .Latest.ByteThroughputs}} [ "{{$index}}s",{{$bytes}}/1000], {{end}}
+      ]);
+
+      var options = {
+        hAxis: {
+          textPosition: 'none',
+            gridlines: {
+                color: 'transparent'
+            },
+        },
+        vAxis: {
+            baselineColor: 'transparent',
+            gridlines: {
+                color: 'transparent'
+            },
+        },
+        height: 100,
+        legend: {position: 'none'},
+      }
+
+      var chart = new google.visualization.LineChart( document.getElementById('throughputBytesTime') );
+      chart.draw(throughputBytes, options);
 
     }
 </script>

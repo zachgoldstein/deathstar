@@ -5,19 +5,28 @@ import (
 	"fmt"
 	"sort"
 	"math"
+	"sync"
 )
 
 //Analyser will
 type Analyser struct {
 	Frequency time.Duration
 	Ticker *time.Ticker
+	ThroughputTicker *time.Ticker
 	Accumulator *Accumulator
 	StatsChan chan AggregatedStats
 	Percentiles []float64
+
+	mu sync.Mutex
+	ThroughputBytes []float64
+	ThroughputResps []float64
 }
+
+const throughputFrequency = time.Second
 
 type AggregatedStats struct {
 	RawStats []ResponseStats
+	OverallStats []OverallStats
 
 	StartTime time.Time
 	TotalTestDuration time.Duration
@@ -32,7 +41,12 @@ type AggregatedStats struct {
 	Yield float64
 	Harvest float64
 
-	//TODO: add a measure of the actual req/s the system is executing, avg, max, min
+	LatestByteThroughput float64
+	LatestRespThroughput float64
+	AverageByteThroughput float64
+	AverageRespThroughput float64
+	ByteThroughputs []float64
+	RespThroughputs []float64
 
 	Percentiles []float64
 
@@ -55,6 +69,8 @@ type AggregatedStats struct {
 	TimeToRespond []float64
 	TimeToConnect []float64
 	TotalTime []float64
+
+	Rate int
 }
 
 func NewAnalyser(acc *Accumulator, frequency time.Duration, percentiles []float64) (*Analyser) {
@@ -70,50 +86,113 @@ func NewAnalyser(acc *Accumulator, frequency time.Duration, percentiles []float6
 
 func (a *Analyser) Start() {
 	a.Ticker = time.NewTicker(a.Frequency)
+	a.ThroughputTicker = time.NewTicker(throughputFrequency)
 	a.Analyse()
 }
 
 func (a *Analyser) Analyse() {
 	go func() {
 		for _ = range a.Ticker.C {
-
 			Log("analyse", fmt.Sprintln("Analysing mock") )
 
+			if (len(a.Accumulator.OverallStats) == 0 || len(a.Accumulator.Stats) == 0) {
+				continue
+			}
+
+
 			stats := AggregatedStats{
+				Rate : a.Accumulator.OverallStats[len(a.Accumulator.OverallStats) - 1].Rate,
 				RawStats : a.Accumulator.Stats,
+				OverallStats : a.Accumulator.OverallStats,
 				Percentiles : a.Percentiles,
 			}
 
-			stats.StartTime, stats.TimeElapsed, stats.TotalTestDuration = DetermineOverallTimes(a.Accumulator.OverallStats)
+			stats.StartTime, stats.TimeElapsed, stats.TotalTestDuration = DetermineOverallTimes(stats.OverallStats)
 
-			stats.TimeToConnectPercentiles, stats.TimeToRespondPercentiles, stats.TotalTimePercentiles = DeterminePercentilesLatencies(a.Percentiles, a.Accumulator.Stats)
+			stats.TimeToConnectPercentiles, stats.TimeToRespondPercentiles, stats.TotalTimePercentiles = DeterminePercentilesLatencies(stats.Percentiles, stats.RawStats)
 
-			stats.MaxTotalTime, stats.MaxTimeToRespond, stats.MaxTimeToConnect = DetermineMaxLatencies(a.Accumulator.Stats)
+			stats.MaxTotalTime, stats.MaxTimeToRespond, stats.MaxTimeToConnect = DetermineMaxLatencies(stats.RawStats)
 
-			stats.MinTotalTime = DetermineMinLatencies(a.Accumulator.Stats)
+			stats.MinTotalTime = DetermineMinLatencies(stats.RawStats)
 
-			stats.MeanTotalTime = MeanLatencies(a.Accumulator.Stats)
+			stats.MeanTotalTime = MeanLatencies(stats.RawStats)
 
-			stats.AvgConcurrentExecutors = AverageConcurrency(a.Accumulator.OverallStats)
+			stats.AvgConcurrentExecutors = AverageConcurrency(stats.OverallStats)
 
-			stats.MaxConcurrentExecutors = MaxConcurrency(a.Accumulator.OverallStats)
+			stats.MaxConcurrentExecutors = MaxConcurrency(stats.OverallStats)
 
-			stats.Failures, stats.RespFailures, stats.ValidationFailures, stats.FailureCounts = GroupFailures(a.Accumulator.Stats)
+			stats.Failures, stats.RespFailures, stats.ValidationFailures, stats.FailureCounts = GroupFailures(stats.RawStats)
 
-			stats.TimeToRespond, stats.TimeToConnect, stats.TotalTime = extractLatencies(a.Accumulator.Stats)
+			stats.TimeToRespond, stats.TimeToConnect, stats.TotalTime = extractLatencies(stats.RawStats)
 
-			stats.TotalResponses = NumResponses(a.Accumulator.Stats)
-			stats.TotalRequests = a.Accumulator.OverallStats[len(a.Accumulator.OverallStats) - 1].NumRequests
+			stats.TotalResponses = NumResponses(stats.RawStats)
+			stats.TotalRequests = stats.OverallStats[len(stats.OverallStats) - 1].NumRequests
 
-			stats.TotalValidResponses = ValidResponses(a.Accumulator.Stats)
+			stats.TotalValidResponses = ValidResponses(stats.RawStats)
 
 			stats.Harvest = Harvest(stats.TotalResponses, stats.TotalRequests)
 			stats.Yield = Yield(stats.TotalResponses, stats.TotalValidResponses)
+
+			if( len(a.ThroughputBytes) != 0 ) {
+				stats.LatestByteThroughput = a.ThroughputBytes[len(a.ThroughputBytes) - 1]
+				stats.LatestRespThroughput = a.ThroughputResps[len(a.ThroughputResps) - 1]
+
+				stats.ByteThroughputs = a.ThroughputBytes
+				stats.RespThroughputs = a.ThroughputResps
+
+				stats.AverageByteThroughput, stats.AverageRespThroughput = a.AvgThroughput()
+			}
 
 			Log("analyse", fmt.Sprintln("Performed analysis and sent to channel ",stats, " ConcurrentExecutors Avg ",stats.AvgConcurrentExecutors, " Max ",stats.MaxConcurrentExecutors) )
 			a.StatsChan <- stats
 		}
 	}()
+
+	//Calculate throughput (occurs at different rate than overall analysis)
+	go func() {
+		for _ = range a.ThroughputTicker.C {
+			Log("temp", fmt.Sprintln("Analysing throughput") )
+
+			a.mu.Lock()
+			throughputBytes, throughputReqs := a.Throughput(a.Accumulator.Stats)
+			a.ThroughputBytes = append(a.ThroughputBytes, throughputBytes)
+			a.ThroughputResps = append(a.ThroughputResps, throughputReqs)
+			a.mu.Unlock()
+			Log("temp", fmt.Sprintln("Analysed throughput bytes", a.ThroughputBytes, " resps ",a.ThroughputResps, " \n") )
+		}
+	}()
+}
+
+func (a *Analyser) Throughput(stats []ResponseStats) (byteRate float64, respRate float64) {
+	totalBytes := 0
+	totalResponses := 0
+	now := time.Now()
+	lastInterval := now.Add(-throughputFrequency)
+	for _, stat := range stats {
+		if !stat.RespErr && stat.FinishTime.After(lastInterval) && stat.FinishTime.Before(now) {
+			totalBytes += len([]byte(stat.RespPayload))
+			totalResponses += 1
+		}
+	}
+	byteRate = float64(totalBytes) / throughputFrequency.Seconds()
+	respRate = float64(totalResponses) / throughputFrequency.Seconds()
+	fmt.Printf("byteRate %v, respRate %v ", byteRate, respRate)
+	fmt.Printf("totalBytes %v, totalResponses %v \n", totalBytes, totalResponses)
+	return byteRate, respRate
+}
+
+func (a *Analyser) AvgThroughput () (avgByteRate float64, avgRespRate float64) {
+	if ( len(a.ThroughputBytes) == 0 || len(a.ThroughputResps) == 0) { return }
+
+	totalBytes := 0.0
+	for _, byteRate := range a.ThroughputBytes { totalBytes += byteRate }
+	avgByteRate = totalBytes / float64( len(a.ThroughputBytes) )
+
+	totalResps := 0.0
+	for _, respRate := range a.ThroughputResps { totalResps += respRate }
+	avgRespRate = totalResps / float64( len(a.ThroughputResps) )
+
+	return
 }
 
 func Harvest(numResponses int, numRequests int) float64 {
@@ -248,18 +327,20 @@ func MeanLatencies(stats []ResponseStats) (meanTotalTime time.Duration) {
 }
 
 func DeterminePercentilesLatencies(percentiles []float64, stats []ResponseStats) (TimeToConnectPercentiles, TimeToRespondPercentiles, TotalTimePercentiles []time.Duration) {
-	if len(stats) == 0 {
-		return TimeToConnectPercentiles, TimeToRespondPercentiles, TotalTimePercentiles
-	}
-
 	TotalTimes := []int{}
 	TimeToResponds := []int{}
 	TimeToConnects := []int{}
 
 	for _, stat := range stats {
+		if (stat.RespErr) { continue }
+
 		TotalTimes = append(TotalTimes, int(stat.TotalTime.Nanoseconds()))
 		TimeToResponds = append(TimeToResponds, int(stat.TimeToRespond.Nanoseconds()))
 		TimeToConnects = append(TimeToConnects, int(stat.TimeToConnect.Nanoseconds()))
+	}
+
+	if len(TotalTimes) == 0 {
+		return TimeToConnectPercentiles, TimeToRespondPercentiles, TotalTimePercentiles
 	}
 
 	sort.Ints(TotalTimes)
@@ -271,7 +352,7 @@ func DeterminePercentilesLatencies(percentiles []float64, stats []ResponseStats)
 	TotalTimePercentiles = make([]time.Duration, len(percentiles))
 
 	for index, percentile := range percentiles {
-		percentileIndexRaw := float64(len(stats)-1) * percentile
+		percentileIndexRaw := float64(len(TotalTimes)-1) * percentile
 		percentileIndexRaw = math.Ceil(percentileIndexRaw)
 		percentileIndex := int(percentileIndexRaw)
 

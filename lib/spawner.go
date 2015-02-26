@@ -32,10 +32,12 @@ type Spawner struct {
 }
 
 type ResponseStats struct {
+	StartTime time.Time
+	FinishTime time.Time
+
 	TimeToConnect time.Duration
 	TimeToRespond time.Duration
 	TotalTime time.Duration
-	ResponsePayload []byte
 	Failure bool
 	FailCategory string
 	ValidationErr bool
@@ -45,6 +47,8 @@ type ResponseStats struct {
 }
 
 type OverallStats struct {
+	Rate int
+
 	StartTime time.Time
 	TotalTestDuration time.Duration
 	TimeElapsed time.Duration
@@ -114,6 +118,7 @@ func (s *Spawner) Start () {
 
 func (s *Spawner) SendOverallStats() {
 	overallStats := OverallStats {
+		Rate : s.Rate,
 		NumExecutors : len(s.ExecutorPool),
 		StartTime : s.StartTime,
 		NumRequests : s.NumRequests,

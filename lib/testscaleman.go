@@ -16,14 +16,14 @@ func DoScaleTest() {
 		issueError(err)
 	}
 
-	runtime.GOMAXPROCS(2)
+	runtime.GOMAXPROCS(4)
 
 	responseStatsChan := make(chan ResponseStats)
 	overallStatsChan := make(chan OverallStats)
 
 	maxTestTime := time.Second * 180
 
-	spawner := NewSpawner(2, maxTestTime, responseStatsChan, overallStatsChan, reqOpts)
+	spawner := NewSpawner(100, maxTestTime, responseStatsChan, overallStatsChan, reqOpts)
 	accumulator := NewAccumulator(spawner.StatsChan, spawner.OverallStatsChan)
 	spawner.Start()
 

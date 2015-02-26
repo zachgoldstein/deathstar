@@ -43,7 +43,10 @@ func (e *Executor) Start(){
 		if e.HasCustomClient() {
 			requester.CustomClient = e.CustomClient
 		}
-		stats, _ := requester.PerformRequest()
+		stats, err := requester.PerformRequest()
+		if (err != nil) {
+			Log( "all", fmt.Sprintln("An error occurred executing request, ", err) )
+		}
 
 		Log("execute", fmt.Sprintln("executor", e.Id, "returning stats", j) )
 		e.IsExecuting = false
