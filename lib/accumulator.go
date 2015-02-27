@@ -8,16 +8,21 @@ type Accumulator struct {
 	mu *sync.Mutex
 	Stats []ResponseStats
 	OverallStats []OverallStats
+	MaxResponses int
+
+	Done chan bool
 
 	StatsChan chan ResponseStats
 	OverallStatsChan chan OverallStats
 }
 
-func NewAccumulator(statsChan chan ResponseStats, overallStatsChan chan OverallStats) *Accumulator {
+func NewAccumulator(maxResponses int, statsChan chan ResponseStats, overallStatsChan chan OverallStats) *Accumulator {
 	newAccumulator := &Accumulator{
+		Done : make(chan bool),
 		mu : &sync.Mutex{},
 		StatsChan : statsChan,
 		OverallStatsChan : overallStatsChan,
+		MaxResponses : maxResponses,
 	}
 	newAccumulator.Start()
 	return newAccumulator
@@ -30,6 +35,10 @@ func (a *Accumulator)Start(){
 			a.mu.Lock()
 			a.Stats = append(a.Stats, stats)
 			a.mu.Unlock()
+			if ( len(a.Stats) >= a.MaxResponses) {
+				Log("top", "All requests received")
+				a.Done <- true
+			}
 		}
 	}()
 
@@ -40,5 +49,4 @@ func (a *Accumulator)Start(){
 			a.mu.Unlock()
 		}
 	}()
-
 }

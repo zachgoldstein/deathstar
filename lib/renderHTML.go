@@ -1,8 +1,6 @@
 package lib
 
 import (
-	"net/http"
-	"log"
 	"html/template"
 	"io/ioutil"
 	"bytes"
@@ -53,19 +51,22 @@ func NewRenderHTML() *RenderHTML {
 
 func (r *RenderHTML) Setup(done chan bool) {
 	r.Done = done
-	go func() {
-		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-			_, err := w.Write( []byte("THIS IS A TEST") )
-			if (err != nil){
-				http.Error(w, "Could not render view", 500)
-			}
-		})
-		log.Print("SERVING ON PORT 9090")
-		log.Fatal(http.ListenAndServe(":9090", nil))
-	}()
+//	go func() {
+//		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+//			_, err := w.Write( []byte("THIS IS A TEST") )
+//			if (err != nil){
+//				http.Error(w, "Could not render view", 500)
+//			}
+//		})
+//		log.Fatal(http.ListenAndServe(":9090", nil))
+//	}()
 }
 
 func (r *RenderHTML) Generate(stats AggregatedStats) {
+	if (stats.TotalRequests == 0 ){
+		return
+	}
+
 	r.Data.Title = "this is a test"
 	r.Data.Latest = stats
 
@@ -123,6 +124,9 @@ func (r *RenderHTML) Render() {
 	}
 
 	ioutil.WriteFile("./output.html", outputBytes, 0644)
+
+
+	Log("reporter","HTML output rendered")
 }
 
 func (r *RenderHTML)Quit() {

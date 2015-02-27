@@ -1,12 +1,25 @@
 package lib
 
-import "fmt"
+import (
+	"log"
+)
 
 var CurrentLogType = "all"
 
 //Log maps fmt.PrintLn, but with a categorization to customize logging results
 func Log(logType string, toPrint ...interface{}) {
-	if (CurrentLogType == logType || logType == "all" || logType == "temp") {
-		fmt.Print(toPrint)
+	if containsSubstring(logType) {
+		log.Print(toPrint...)
 	}
+}
+
+var acceptableLogTypes = []string{"all", "temp", "analyse", "top", "spawn"}
+
+func containsSubstring(logType string) bool {
+	for _, acceptableLogType := range acceptableLogTypes {
+		if (logType == acceptableLogType) {
+			return true
+		}
+	}
+	return false
 }

@@ -5,30 +5,35 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"runtime"
 )
 
 //Spawner is responsible for initiating requests on a channel at a specific rate
 //It manages a pool of executors that will create and issue requests
 type Spawner struct {
 	Rate int
+	MaxExecutionTime time.Duration
+	RequestOptions RequestOptions
+	RequestsToIssue int
+	ReqLimitMode string
+	Concurrency int
+
 	ExecutorPool []*Executor
 	Ticker *time.Ticker
 	OverallTicker *time.Ticker
+	TimeoutTimer *time.Timer
 	StartTime time.Time
 
 	RequestChan chan bool
-
 	StatsChan chan ResponseStats
 	OverallStatsChan chan OverallStats
 	Done chan bool
 
-	Duration time.Duration
-	RequestOptions RequestOptions
 	Started bool
 	CustomClient *http.Client
 
 	mu sync.Mutex
-	NumRequests int
+	RequestsIssued int
 }
 
 type ResponseStats struct {
@@ -53,7 +58,7 @@ type OverallStats struct {
 	TotalTestDuration time.Duration
 	TimeElapsed time.Duration
 
-	NumRequests int
+	RequestsIssued int
 
 	NumExecutors int
 	NumBusyExecutors int
@@ -63,57 +68,83 @@ type OverallStats struct {
 const tickerSecFrequency = 1
 const overallStatsTickerFrequency = 100
 
-func NewSpawner(rate int, maxExecutionTime time.Duration, responseStatsChan chan ResponseStats, overallStatsChan chan OverallStats, reqOpts RequestOptions) *Spawner {
+func NewSpawner(responseStatsChan chan ResponseStats, overallStatsChan chan OverallStats, reqOpts RequestOptions) *Spawner {
 	return &Spawner{
-		Ticker : time.NewTicker(time.Second * tickerSecFrequency),
-		OverallTicker : time.NewTicker(time.Millisecond * overallStatsTickerFrequency),
-		Rate : rate,
 		RequestChan : make(chan bool),
 		Done : make(chan bool),
 		StatsChan: responseStatsChan,
 		OverallStatsChan: overallStatsChan,
-		Duration: maxExecutionTime,
+
+		Rate : reqOpts.Rate,
+		MaxExecutionTime: reqOpts.MaxExecutionTime,
+		RequestsToIssue : reqOpts.RequestsToIssue,
 		RequestOptions : reqOpts,
+		ReqLimitMode : reqOpts.ReqLimitMode,
+		Concurrency : reqOpts.Concurrency,
 	}
 }
 
 func (s *Spawner) Start () {
-	Log("spawn", fmt.Sprintln("Spawning requests for ",s.Duration, " seconds") )
 
-	Log("spawn", fmt.Sprintln("Blocking select for ticks and timeouts") )
+	Log("spawn", fmt.Sprintln("Spawner starting") )
 
-	Log("spawn", fmt.Sprintln("timeout duration ",s.Duration) )
-	timeoutTimer := time.NewTimer(s.Duration)
 	s.StartTime = time.Now()
 
-	//Goroutine to trigger periodic requests and stats
-	go func () {
-		for {
-			select {
-			case tick := <-s.Ticker.C:
-				Log("spawn", fmt.Sprintln("TICK at ",tick) )
-				s.MakeRequests()
-			case _ = <-s.OverallTicker.C:
-				s.SendOverallStats()
-			case timeout := <-timeoutTimer.C:
-				Log("spawn", fmt.Sprintln("Timed out, ",timeout) )
-				s.SendOverallStats()
-				s.Ticker.Stop()
-				//TODO: make sure that does not send done until all requests are finished
-				// use another goroutine and check every request after the ticker is stopped
-				s.Done <- true
-			}
-		}
-	}()
+	runtime.GOMAXPROCS(s.RequestOptions.CPUs)
 
-	//Start any executors in the pool
-	for _, executor := range s.ExecutorPool {
-		if !executor.Started {
-			go executor.Start()
-		}
-	}
+	//TODO: executor pool IS concurrency. Size should be user tunable
+	//reqs should NOT be triggered on a ticker, executors should pull them off the chan as soon as they can...
+	//pool size should NOT change
+	//scale tests test MAX rate given X total requests and Y concurrecy (pool size)
+	//fail tests should ramp number of request/s by increasing the amount of reqs queued on chan periodically
+
+	s.SetupExecutorPool()
+
+	s.SetupOverallStatsPipe()
+
+	s.SetupTimeout()
+
+	s.StartRequests()
 
 	s.Started = true
+
+	Log("spawn", fmt.Sprintln("Spawner started ") )
+}
+
+func (s *Spawner) SetupTimeout() {
+	s.TimeoutTimer = time.NewTimer(s.MaxExecutionTime)
+	Log("spawn", fmt.Sprintln("Timeout timer has started, and will trigger in ",s.MaxExecutionTime) )
+	go func () {
+		for _ = range s.TimeoutTimer.C {
+			Log("spawn", fmt.Sprintln("Timed out, ",time.Now()) )
+			s.Stop()
+		}
+	}()
+}
+
+func (s *Spawner) Cleanup() {
+	s.SendOverallStats()
+}
+
+func (s *Spawner) Stop() {
+	//TODO: make sure that does not send done until all requests are finished
+	// use another goroutine and check every request after the ticker is stopped
+	s.TimeoutTimer.Stop()
+	if (s.ReqLimitMode == "rate") {
+		s.Ticker.Stop()
+	}
+	s.OverallTicker.Stop()
+}
+
+func (s *Spawner) SetupOverallStatsPipe() {
+	Log("spawn", fmt.Sprintln("Overall stats will be gathered every ",time.Millisecond * overallStatsTickerFrequency) )
+
+	s.OverallTicker = time.NewTicker(time.Millisecond * overallStatsTickerFrequency)
+	go func () {
+		for _ = range s.OverallTicker.C {
+			s.SendOverallStats()
+		}
+	}()
 }
 
 func (s *Spawner) SendOverallStats() {
@@ -121,7 +152,7 @@ func (s *Spawner) SendOverallStats() {
 		Rate : s.Rate,
 		NumExecutors : len(s.ExecutorPool),
 		StartTime : s.StartTime,
-		NumRequests : s.NumRequests,
+		RequestsIssued : s.RequestsIssued,
 	}
 
 	for _, executor := range s.ExecutorPool {
@@ -133,53 +164,60 @@ func (s *Spawner) SendOverallStats() {
 	}
 
 	overallStats.TimeElapsed = time.Since(s.StartTime)
-	overallStats.TotalTestDuration = s.Duration
+	overallStats.TotalTestDuration = s.MaxExecutionTime
 
 	s.OverallStatsChan <- overallStats
 }
 
-func (s *Spawner) MakeRequests() {
-	//Issue requests on the channel
-	//If all of the executors are busy, expand the pool as neccessary and create more executors.
-	newExecutors := []*Executor{}
-	numAvailableExecutors := 0
-	for _, executor := range s.ExecutorPool {
-		if !executor.IsExecuting {
-			numAvailableExecutors += 1
+func (s *Spawner) SetupExecutorPool() {
+	Log("spawn", fmt.Sprintln("Adding ", s.Concurrency ,"executors to pool") )
+
+	s.ExecutorPool = make([]*Executor, s.Concurrency)
+
+	for i:= 0; i < s.Concurrency; i++ {
+		newExecutor := NewExecutor(fmt.Sprint(i), s.RequestChan, s.StatsChan, s.RequestOptions)
+
+		if s.HasCustomClient() {
+			newExecutor.CustomClient = s.CustomClient
 		}
+
+		go newExecutor.Start()
+
+		s.ExecutorPool[i] = newExecutor
 	}
-	if numAvailableExecutors < int(s.Rate) {
-		numToAdd := int(s.Rate) - numAvailableExecutors
-		Log("spawn", fmt.Sprintln("Adding ",numToAdd," executors to pool") )
+}
 
-		for i:= 0; i < numToAdd; i++ {
-			Log("spawn", fmt.Sprintln("Adding executor to pool", string(len(s.ExecutorPool) + i)) )
-
-			newExecutor := NewExecutor(fmt.Sprint(len(s.ExecutorPool) + i), s.RequestChan, s.StatsChan, s.RequestOptions)
-			if s.HasCustomClient() {
-				newExecutor.CustomClient = s.CustomClient
+func (s *Spawner) StartRequests() {
+	if (s.ReqLimitMode == "total") {
+		Log("spawn", fmt.Sprintln("Requests are limited by total quantity, ", s.RequestsToIssue, " requests have been buffered on the channel") )
+		go func(){
+			for i:= 0; i < s.RequestsToIssue; i++ {
+				s.RequestsIssued += 1
+				s.RequestChan <- true
 			}
-			newExecutors = append(newExecutors, newExecutor)
-		}
-	}
-
-	s.ExecutorPool = append(s.ExecutorPool, newExecutors...)
-
-	//Start executors if the spawner is started
-	if s.Started {
-		for _, executor := range s.ExecutorPool {
-			if !executor.Started {
-				go executor.Start()
+		}()
+	} else if (s.ReqLimitMode == "rate") {
+		s.Ticker = time.NewTicker(time.Second * tickerSecFrequency)
+		go func(){
+			for _ = range s.Ticker.C{
+				Log("spawn", fmt.Sprintln(" Requests are rate limited - triggering set of ", s.Rate, " requests at ",time.Now() ) )
+				s.mu.Lock()
+				for i:= 0; i < int(s.Rate); i++ {
+					if (s.RequestsIssued < s.RequestsToIssue) {
+						s.RequestsIssued += 1
+						s.RequestChan <- true
+					} else {
+						s.Cleanup()
+						s.Stop()
+						s.Done <- true
+						break
+					}
+				}
+				s.mu.Unlock()
 			}
-		}
-	}
 
-	s.mu.Lock()
-	for i:= 0; i < int(s.Rate); i++ {
-		s.NumRequests += 1
-		s.RequestChan <- true
+		}()
 	}
-	s.mu.Unlock()
 }
 
 func (s *Spawner) HasCustomClient() bool {
@@ -188,4 +226,3 @@ func (s *Spawner) HasCustomClient() bool {
 	}
 	return false
 }
-

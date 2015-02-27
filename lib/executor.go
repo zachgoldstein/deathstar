@@ -17,6 +17,8 @@ type Executor struct {
 	StatsChan chan ResponseStats
 	RequestOptions RequestOptions
 	Started bool
+
+	Requester *RequestRecorder
 	CustomClient *http.Client
 }
 
@@ -35,15 +37,21 @@ func NewExecutor(id string, requestChan chan bool, statsChan chan ResponseStats,
 // It will only attempt to receive off the channel when it's done its request response cycle.
 func (e *Executor) Start(){
 	e.Started = true
+
+	e.Requester = NewRequestRecorder(e.RequestOptions)
+	if e.HasCustomClient() {
+		e.Requester.Client = e.CustomClient
+	}
+
 	for j := range e.RequestChan {
 		e.IsExecuting = true
 		Log("execute", fmt.Sprintln("executor", e.Id, "issuing request", j) )
 
-		requester := NewRequestRecorder(e.RequestOptions)
-		if e.HasCustomClient() {
-			requester.CustomClient = e.CustomClient
-		}
-		stats, err := requester.PerformRequest()
+//			requester := NewRequestRecorder(e.RequestOptions)
+//			if e.HasCustomClient() {
+//				requester.CustomClient = e.CustomClient
+//			}
+		stats, err := e.Requester.PerformRequest()
 		if (err != nil) {
 			Log( "all", fmt.Sprintln("An error occurred executing request, ", err) )
 		}
