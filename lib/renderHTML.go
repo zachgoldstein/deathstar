@@ -14,8 +14,12 @@ type RenderHTML struct {
 }
 
 type RenderData struct {
+	ReqOpts RequestOptions
+
 	Latest AggregatedStats
 	Title string
+
+	ModeDesc string
 
 	LatestConnectPercentiles []float64
  	LatestTotalPercentiles []float64
@@ -43,23 +47,16 @@ type RenderData struct {
 	AvgThroughputResps string
 }
 
-func NewRenderHTML() *RenderHTML {
+func NewRenderHTML(reqOpts RequestOptions) *RenderHTML {
 	return &RenderHTML{
-		Data : RenderData{},
+		Data : RenderData{
+			ReqOpts : reqOpts,
+		},
 	}
 }
 
 func (r *RenderHTML) Setup(done chan bool) {
 	r.Done = done
-//	go func() {
-//		http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-//			_, err := w.Write( []byte("THIS IS A TEST") )
-//			if (err != nil){
-//				http.Error(w, "Could not render view", 500)
-//			}
-//		})
-//		log.Fatal(http.ListenAndServe(":9090", nil))
-//	}()
 }
 
 func (r *RenderHTML) Generate(stats AggregatedStats) {
@@ -67,8 +64,14 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 		return
 	}
 
-	r.Data.Title = "this is a test"
+	r.Data.Title = "Testman"
 	r.Data.Latest = stats
+
+	if (r.Data.ReqOpts.ReqLimitMode == "total") {
+		r.Data.ModeDesc = "Executing all requests"
+	} else if (r.Data.ReqOpts.ReqLimitMode == "rate"){
+		r.Data.ModeDesc = "Executing at specified rate"
+	}
 
 	r.Data.LatestConnectPercentiles, r.Data.LatestTotalPercentiles, r.Data.LatestResponsePercentiles = r.GeneratePercentiles(stats)
 	r.Data.PercentileTitles = []string{}

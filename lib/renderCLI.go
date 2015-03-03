@@ -30,14 +30,16 @@ type CLIRenderData struct {
 	LatestSummary string
 }
 
-func NewRenderCLI() *RenderCLI {
+func NewRenderCLI(reqOpts RequestOptions) *RenderCLI {
 	return &RenderCLI{
+		ReqOpts : reqOpts,
 		Done : make(chan bool),
 	}
 }
 
 type RenderCLI struct {
 	GUI *gocui.Gui
+	ReqOpts RequestOptions
 	Data CLIRenderData
 	Done chan bool
 }

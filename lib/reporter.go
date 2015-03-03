@@ -27,7 +27,7 @@ type Renderer interface {
 	Quit()
 }
 
-func NewReporter(dataChan chan AggregatedStats, pretty bool, opts OutputOptions) *Reporter {
+func NewReporter(dataChan chan AggregatedStats, pretty bool, opts OutputOptions, reqOpts RequestOptions) *Reporter {
 	reporter := &Reporter{
 		mu : &sync.Mutex{},
 		DataChan : dataChan,
@@ -39,11 +39,11 @@ func NewReporter(dataChan chan AggregatedStats, pretty bool, opts OutputOptions)
 
 	//TODO: add support for multiple renderers at one time
 	if reporter.RenderHTML {
-		reporter.Renderer = NewRenderHTML()
+		reporter.Renderer = NewRenderHTML(reqOpts)
 		reporter.Renderer.Setup(reporter.Done)
 
 	} else if reporter.RenderCLI {
-		reporter.Renderer = NewRenderCLI()
+		reporter.Renderer = NewRenderCLI(reqOpts)
 		reporter.Renderer.Setup(reporter.Done)
 	}
 	//TODO: add simple output

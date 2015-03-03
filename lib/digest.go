@@ -41,6 +41,7 @@ var DefaultRequestOptions RequestOptions = RequestOptions{
 	EnableKeepAlive : false,
 	TLSHandshakeTimeout : time.Second * 2,
 	CPUs : runtime.NumCPU(),
+	Rate : 100,
 	Concurrency: 150,
 
 	ReqLimitMode : "total",

@@ -24,7 +24,7 @@ func DoScaleTest() {
 	reportFrequency := time.Millisecond * 200
 	percentiles := []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999, 0.9999}
 	analyser := NewAnalyser(accumulator, reportFrequency, percentiles)
-	reporter := NewReporter(analyser.StatsChan, false, outOpts)
+	reporter := NewReporter(analyser.StatsChan, false, outOpts, reqOpts)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

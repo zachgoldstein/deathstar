@@ -51,6 +51,50 @@
 </div>
 
 <div class="row">
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Mode
+            </div>
+            <div class="chart-stage">
+                <h3>{{.ModeDesc}}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                CPUs
+            </div>
+            <div class="chart-stage">
+                <h1>{{.ReqOpts.CPUs}} CPUs</h1>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Concurrency
+            </div>
+            <div class="chart-stage">
+                <h3>{{.ReqOpts.Concurrency}} workers in pool</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-md-3">
+        <div class="chart-wrapper">
+            <div class="chart-title">
+                Specified Rate
+            </div>
+            <div class="chart-stage">
+                <h1>{{.ReqOpts.Rate}}req/s</h1>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<div class="row">
     <div class="col-sm-6 col-md-6">
         <div class="chart-wrapper">
             <div class="chart-title">

@@ -109,13 +109,8 @@ func (r *RequestRecorder) createHttpClient() (*http.Client) {
 		DisableCompression : true,
 		MaxIdleConnsPerHost : 2,
 		Dial: r.DialWithTimeRecorder,
-//		Dial: (&net.Dialer{
-//			Timeout:   r.RequestOptions.Timeout,
-//			KeepAlive: r.RequestOptions.KeepAlive,
-//		}).Dial,
 		TLSHandshakeTimeout: r.RequestOptions.TLSHandshakeTimeout,
 	}
-
 
 	client.Timeout = r.RequestOptions.Timeout
 	client.Transport = transport
@@ -135,6 +130,7 @@ func (r *RequestRecorder) DialWithTimeRecorder(network, address string) (conn ne
 
 	if (err != nil) {
 		Log("temp", "dialer err? ",err)
+		return conn, err
 	}
 
 	r.ConnectionTime = time.Since(now)

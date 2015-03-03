@@ -397,5 +397,5 @@ func extractLatencies(stats []ResponseStats) (TimeToRespond, TimeToConnect, Tota
 }
 
 func commonFixes() {
-	// If
+	// If "can't assign requested address" errors occur, you're likely bumping into limits imposed by local client OS
 }
