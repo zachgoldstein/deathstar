@@ -11,7 +11,7 @@ import (
 //Spawner is responsible for initiating requests on a channel at a specific rate
 //It manages a pool of executors that will create and issue requests
 type Spawner struct {
-	Rate int
+	Rate float64
 	MaxExecutionTime time.Duration
 	RequestOptions RequestOptions
 	RequestsToIssue int
@@ -23,6 +23,7 @@ type Spawner struct {
 	OverallTicker *time.Ticker
 	TimeoutTimer *time.Timer
 	StartTime time.Time
+	StopTime time.Time
 
 	RequestChan chan bool
 	StatsChan chan ResponseStats
@@ -30,6 +31,7 @@ type Spawner struct {
 	Done chan bool
 
 	Started bool
+	Stopped bool
 	CustomClient *http.Client
 
 	mu sync.Mutex
@@ -52,11 +54,12 @@ type ResponseStats struct {
 }
 
 type OverallStats struct {
-	Rate int
+	Rate float64
 
 	StartTime time.Time
 	TotalTestDuration time.Duration
 	TimeElapsed time.Duration
+	TimeWaitingOnFinalReqs time.Duration
 
 	RequestsIssued int
 
@@ -79,7 +82,6 @@ func NewSpawner(responseStatsChan chan ResponseStats, overallStatsChan chan Over
 		MaxExecutionTime: reqOpts.MaxExecutionTime,
 		RequestsToIssue : reqOpts.RequestsToIssue,
 		RequestOptions : reqOpts,
-		ReqLimitMode : reqOpts.ReqLimitMode,
 		Concurrency : reqOpts.Concurrency,
 	}
 }
@@ -118,6 +120,7 @@ func (s *Spawner) SetupTimeout() {
 		for _ = range s.TimeoutTimer.C {
 			Log("spawn", fmt.Sprintln("Timed out, ",time.Now()) )
 			s.Stop()
+			s.Done <- true
 		}
 	}()
 }
@@ -127,10 +130,14 @@ func (s *Spawner) Cleanup() {
 }
 
 func (s *Spawner) Stop() {
-	//TODO: make sure that does not send done until all requests are finished
-	// use another goroutine and check every request after the ticker is stopped
+	s.Stopped = true
+	s.StopTime = time.Now()
+	for _, executor := range s.ExecutorPool {
+		executor.Stop()
+	}
+
 	s.TimeoutTimer.Stop()
-	if (s.ReqLimitMode == "rate") {
+	if (s.RequestOptions.IncreaseRateToFailure) {
 		s.Ticker.Stop()
 	}
 	s.OverallTicker.Stop()
@@ -164,7 +171,11 @@ func (s *Spawner) SendOverallStats() {
 	}
 
 	overallStats.TimeElapsed = time.Since(s.StartTime)
+	overallStats.TimeWaitingOnFinalReqs = time.Since(s.StopTime)
 	overallStats.TotalTestDuration = s.MaxExecutionTime
+	if (overallStats.TimeElapsed > overallStats.TotalTestDuration) {
+		overallStats.TimeElapsed = overallStats.TotalTestDuration
+	}
 
 	s.OverallStatsChan <- overallStats
 }
@@ -188,21 +199,14 @@ func (s *Spawner) SetupExecutorPool() {
 }
 
 func (s *Spawner) StartRequests() {
-	if (s.ReqLimitMode == "total") {
-		Log("spawn", fmt.Sprintln("Requests are limited by total quantity, ", s.RequestsToIssue, " requests have been buffered on the channel") )
-		go func(){
-			for i:= 0; i < s.RequestsToIssue; i++ {
-				s.RequestsIssued += 1
-				s.RequestChan <- true
-			}
-		}()
-	} else if (s.ReqLimitMode == "rate") {
-		s.Ticker = time.NewTicker(time.Second * tickerSecFrequency)
-		go func(){
-			for _ = range s.Ticker.C{
-				Log("spawn", fmt.Sprintln(" Requests are rate limited - triggering set of ", s.Rate, " requests at ",time.Now() ) )
+	if s.RequestOptions.IncreaseRateToFailure {
+		s.Ticker = time.NewTicker(time.Second*tickerSecFrequency)
+		go func() {
+			for _ = range s.Ticker.C {
+				if (s.Stopped) { continue }
+				Log("spawn", fmt.Sprintln(" Requests are rate limited - triggering set of ", s.Rate, " requests at ", time.Now()))
 				s.mu.Lock()
-				for i:= 0; i < int(s.Rate); i++ {
+				for i := 0; i < int(s.Rate); i++ {
 					if (s.RequestsIssued < s.RequestsToIssue) {
 						s.RequestsIssued += 1
 						s.RequestChan <- true
@@ -215,7 +219,17 @@ func (s *Spawner) StartRequests() {
 				}
 				s.mu.Unlock()
 			}
-
+		}()
+	} else {
+		Log("spawn", fmt.Sprintln("Requests are limited by total quantity, ", s.RequestsToIssue, " requests have been buffered on the channel"))
+		go func() {
+			for i := 0; i < s.RequestsToIssue; i++ {
+				if (s.Stopped) {
+					break
+				}
+				s.RequestsIssued += 1
+				s.RequestChan <- true
+			}
 		}()
 	}
 }

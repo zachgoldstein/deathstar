@@ -17,6 +17,13 @@ type Analyser struct {
 	StatsChan chan AggregatedStats
 	Percentiles []float64
 
+	StartTime time.Time
+	WarmUpTime time.Duration
+
+	CalculateRate bool
+
+	Fail chan bool
+
 	mu sync.Mutex
 	ThroughputBytes []float64
 	ThroughputResps []float64
@@ -31,6 +38,7 @@ type AggregatedStats struct {
 	StartTime time.Time
 	TotalTestDuration time.Duration
 	TimeElapsed time.Duration
+	TimeWaitingOnFinalReqs time.Duration
 
 	TotalRequests int
 	TotalResponses int
@@ -70,21 +78,26 @@ type AggregatedStats struct {
 	TimeToConnect []float64
 	TotalTime []float64
 
-	Rate int
+	Rate float64
 }
 
-func NewAnalyser(acc *Accumulator, frequency time.Duration, percentiles []float64) (*Analyser) {
+var defaultPercentiles = []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999, 0.9999}
+
+func NewAnalyser(acc *Accumulator, frequency time.Duration, warmUpTime time.Duration, calcRate bool, percentiles []float64) (*Analyser) {
 	analyser := &Analyser{
 		Accumulator : acc,
 		Frequency : frequency,
 		StatsChan : make(chan AggregatedStats),
 		Percentiles : percentiles,
+		WarmUpTime : warmUpTime,
+		CalculateRate : calcRate,
 	}
 	analyser.Start()
 	return analyser
 }
 
 func (a *Analyser) Start() {
+	a.StartTime = time.Now()
 	a.Ticker = time.NewTicker(a.Frequency)
 	a.ThroughputTicker = time.NewTicker(throughputFrequency)
 	a.Analyse()
@@ -94,14 +107,18 @@ func (a *Analyser) Start() {
 func (a *Analyser) SetupAnalysis() {
 	go func() {
 		for _ = range a.Ticker.C {
-			a.Analyse()
+			if (time.Now().After(a.StartTime.Add(a.WarmUpTime))) {
+				a.Analyse()
+			}
 		}
 	}()
 
 	//Calculate throughput (occurs at different rate than overall analysis)
 	go func() {
 		for _ = range a.ThroughputTicker.C {
-			a.SetThroughput()
+			if (time.Now().After(a.StartTime.Add(a.WarmUpTime))) {
+				a.SetThroughput()
+			}
 		}
 	}()
 }
@@ -133,7 +150,7 @@ func (a *Analyser) Analyse() {
 		Percentiles : a.Percentiles,
 	}
 
-	stats.StartTime, stats.TimeElapsed, stats.TotalTestDuration = DetermineOverallTimes(stats.OverallStats)
+	stats.StartTime, stats.TimeElapsed, stats.TotalTestDuration, stats.TimeWaitingOnFinalReqs = DetermineOverallTimes(stats.OverallStats)
 
 	stats.TimeToConnectPercentiles, stats.TimeToRespondPercentiles, stats.TotalTimePercentiles = DeterminePercentilesLatencies(stats.Percentiles, stats.RawStats)
 
@@ -153,6 +170,10 @@ func (a *Analyser) Analyse() {
 
 	stats.TotalResponses = NumResponses(stats.RawStats)
 	stats.TotalRequests = stats.OverallStats[len(stats.OverallStats) - 1].RequestsIssued
+
+	if (a.CalculateRate) {
+		stats.Rate = float64(stats.TotalRequests) / stats.TimeElapsed.Seconds()
+	}
 
 	stats.TotalValidResponses = ValidResponses(stats.RawStats)
 
@@ -245,11 +266,11 @@ func NumResponses(stats []ResponseStats) int {
 	return numResponses
 }
 
-func DetermineOverallTimes(overallStats []OverallStats) (startTime time.Time, timeElapsed time.Duration, totalTestDuration time.Duration)  {
-	if (len(overallStats) == 0 ) { return time.Now(), time.Nanosecond, time.Nanosecond}
+func DetermineOverallTimes(overallStats []OverallStats) (startTime time.Time, timeElapsed time.Duration, totalTestDuration time.Duration, timeWaitingOnFinalReqs time.Duration)  {
+	if (len(overallStats) == 0 ) { return time.Now(), time.Nanosecond, time.Nanosecond, time.Nanosecond}
 
 	latestStat := overallStats[len(overallStats)-1]
-	return latestStat.StartTime, latestStat.TimeElapsed, latestStat.TotalTestDuration
+	return latestStat.StartTime, latestStat.TimeElapsed, latestStat.TotalTestDuration, latestStat.TimeWaitingOnFinalReqs
 }
 
 func AverageConcurrency(stats []OverallStats) int {

@@ -7,7 +7,6 @@ import (
 type Reporter struct {
 	DataChan chan AggregatedStats
 	Done chan bool
-	Pretty bool
 	RenderHTML bool
 	RenderCLI bool
 
@@ -27,12 +26,11 @@ type Renderer interface {
 	Quit()
 }
 
-func NewReporter(dataChan chan AggregatedStats, pretty bool, opts OutputOptions, reqOpts RequestOptions) *Reporter {
+func NewReporter(dataChan chan AggregatedStats, opts OutputOptions, reqOpts RequestOptions) *Reporter {
 	reporter := &Reporter{
 		mu : &sync.Mutex{},
 		DataChan : dataChan,
 		Done : make(chan bool),
-		Pretty : pretty,
 		RenderHTML : opts.ShowHTML,
 		RenderCLI : opts.ShowCLI,
 	}
@@ -75,7 +73,7 @@ func (r *Reporter) Cleanup() {
 }
 
 func (r *Reporter) Stop() {
-	if (r.Pretty) {
+	if (r.RenderCLI) {
 		r.Renderer.Quit()
 	}
 }

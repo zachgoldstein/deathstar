@@ -67,10 +67,12 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	r.Data.Title = "Testman"
 	r.Data.Latest = stats
 
-	if (r.Data.ReqOpts.ReqLimitMode == "total") {
-		r.Data.ModeDesc = "Executing all requests"
-	} else if (r.Data.ReqOpts.ReqLimitMode == "rate"){
-		r.Data.ModeDesc = "Executing at specified rate"
+	if (r.Data.ReqOpts.IncreaseRateToFailure) {
+		r.Data.ModeDesc = "Rate is increasing until failure"
+	} else if (r.Data.ReqOpts.ExecuteSingleRequest){
+		r.Data.ModeDesc = "A single request is being executed"
+	} else {
+		r.Data.ModeDesc = "Executing as many req/s as possible"
 	}
 
 	r.Data.LatestConnectPercentiles, r.Data.LatestTotalPercentiles, r.Data.LatestResponsePercentiles = r.GeneratePercentiles(stats)
