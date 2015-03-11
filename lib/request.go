@@ -6,9 +6,6 @@ import (
 	"time"
 	"net"
 	"bytes"
-	"github.com/xeipuuv/gojsonschema"
-	"fmt"
-	"sort"
 	"net/http/httputil"
 )
 
@@ -48,10 +45,7 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 			TotalTime: r.TotalTime,
 			StartTime: startTime,
 			FinishTime: time.Now(),
-			Failure : true,
-			ValidationErr : false,
-			RespErr : true,
-			FailCategory : err.Error(),
+			Failures : []DescriptiveError{*NewRequestExecutionError(err)},
 		}, err
 	}
 
@@ -64,23 +58,30 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 			TotalTime: r.TotalTime,
 			StartTime: startTime,
 			FinishTime: time.Now(),
-			Failure : true,
-			ValidationErr : false,
-			RespErr : true,
-			FailCategory : err.Error(),
+			Failures : []DescriptiveError{*NewRequestExecutionError(err)},
 		}, err
 	}
 	finishTime := time.Now()
 
 	r.TotalTime = time.Since(startTime)
-
 	r.RequestTime = r.TotalTime - r.ConnectionTime
 
-	reqBody, respBody, err := r.isolatePayloads(req, resp)
-//	reqBody, respBody := "",""
+	reqBody, respBody, _ := r.isolatePayloads(req, resp)
 
-	valid, validationErr, respErr, failCategory, err := r.validateResponse(respBody, resp, r.RequestOptions.JSONSchema)
-//	valid, validationErr, respErr, failCategory, err := true, false, false, "", nil
+	failures := []DescriptiveError{}
+
+	statusFailure := ValidateStatusCode(200, resp)
+	if (statusFailure != nil) {
+		failures = append(failures, statusFailure)
+	}
+
+	if (r.RequestOptions.JSONSchema != ""){
+		err = ValidateSchema(respBody, resp, r.RequestOptions.JSONSchema)
+		if (err != nil) {
+			descriptiveErr, _ := err.(DescriptiveError)
+			failures = append(failures, descriptiveErr)
+		}
+	}
 
 	return ResponseStats {
 		TimeToConnect: r.ConnectionTime,
@@ -88,13 +89,12 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 		TotalTime: r.TotalTime,
 		StartTime: startTime,
 		FinishTime: finishTime,
-		Failure : !valid,
-		ValidationErr : validationErr,
-		RespErr : respErr,
-		FailCategory : failCategory,
+
+		Failures : failures,
+
 		ReqPayload : reqBody,
 		RespPayload : respBody,
-	}, nil
+	}, err
 }
 
 func (r *RequestRecorder) constructRequest() (req *http.Request, err error) {
@@ -164,29 +164,29 @@ func (r *RequestRecorder) isolatePayloads (req *http.Request, resp *http.Respons
 	return string(reqPayload), string(respPayload), err
 }
 
-func (r *RequestRecorder) validateResponse(respPayload string, resp *http.Response, schema string) (valid bool, validationErr bool, respErr bool, failCategory string, err error) {
-	if resp.StatusCode != 200 {
-		return false, false, true, resp.Status, nil
-	}
-
-	responseLoader := gojsonschema.NewStringLoader(respPayload)
-	schemaLoader := gojsonschema.NewStringLoader(schema)
-	res, err := gojsonschema.Validate(schemaLoader, responseLoader)
-	if (err != nil) {
-		return false, true, false, err.Error(), err
-	}
-
-	Log("debug", "VALID RESPONSE? ",res)
-
-	if !res.Valid() {
-		errors := []string{}
-		for _, validateError := range res.Errors() {
-			errors = append(errors, fmt.Sprintf("Validation Error: %v", validateError))
-		}
-		sort.Strings(errors)
-
-		return false, true, false, fmt.Sprint(errors), nil
-	}
-
-	return true, false, false, "", nil
-}
+//func (r *RequestRecorder) validateResponse(respPayload string, resp *http.Response, schema string) (valid bool, validationErr bool, respErr bool, failCategory string, err error) {
+//	if resp.StatusCode != 200 {
+//		return false, false, true, resp.Status, nil
+//	}
+//
+//	responseLoader := gojsonschema.NewStringLoader(respPayload)
+//	schemaLoader := gojsonschema.NewStringLoader(schema)
+//	res, err := gojsonschema.Validate(schemaLoader, responseLoader)
+//	if (err != nil) {
+//		return false, true, false, err.Error(), err
+//	}
+//
+//	Log("debug", "VALID RESPONSE? ",res)
+//
+//	if !res.Valid() {
+//		errors := []string{}
+//		for _, validateError := range res.Errors() {
+//			errors = append(errors, fmt.Sprintf("Validation Error: %v", validateError))
+//		}
+//		sort.Strings(errors)
+//
+//		return false, true, false, fmt.Sprint(errors), nil
+//	}
+//
+//	return true, false, false, "", nil
+//}

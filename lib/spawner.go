@@ -45,12 +45,18 @@ type ResponseStats struct {
 	TimeToConnect time.Duration
 	TimeToRespond time.Duration
 	TotalTime time.Duration
-	Failure bool
-	FailCategory string
-	ValidationErr bool
-	RespErr bool
+
+	Failures []DescriptiveError
+
 	ReqPayload string
 	RespPayload string
+}
+
+func (r *ResponseStats) Failure() bool {
+	if (len(r.Failures) > 0) {
+		return true
+	}
+	return false
 }
 
 type OverallStats struct {

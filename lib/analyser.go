@@ -8,7 +8,6 @@ import (
 	"sync"
 )
 
-//Analyser will
 type Analyser struct {
 	Frequency time.Duration
 	Ticker *time.Ticker
@@ -102,6 +101,7 @@ func (a *Analyser) Start() {
 	a.ThroughputTicker = time.NewTicker(throughputFrequency)
 	a.Analyse()
 	a.SetupAnalysis()
+	Log("analyse", fmt.Sprintln("Analyser started, warmining up for ",a.WarmUpTime, " before performing first analysis") )
 }
 
 func (a *Analyser) SetupAnalysis() {
@@ -132,7 +132,6 @@ func (a *Analyser) Cleanup() {
 	a.SetThroughput()
 	a.Analyse()
 }
-
 
 func (a *Analyser) Analyse() {
 	Log("analyse", fmt.Sprintln("Analysing mock") )
@@ -211,7 +210,7 @@ func (a *Analyser) Throughput(stats []ResponseStats) (byteRate float64, respRate
 	now := time.Now()
 	lastInterval := now.Add(-throughputFrequency)
 	for _, stat := range stats {
-		if !stat.RespErr && stat.FinishTime.After(lastInterval) && stat.FinishTime.Before(now) {
+		if DoAnalysis(stat) && stat.FinishTime.After(lastInterval) && stat.FinishTime.Before(now) {
 			totalBytes += len([]byte(stat.RespPayload))
 			totalResponses += 1
 		}
@@ -244,7 +243,7 @@ func Harvest(numResponses int, numRequests int) float64 {
 func ValidResponses(stats []ResponseStats) int {
 	validResponses := 0
 	for _, stat := range stats {
-		if (!stat.ValidationErr && !stat.Failure) {
+		if (!stat.Failure()) {
 			validResponses += 1
 		}
 	}
@@ -259,7 +258,16 @@ func Yield(numResponses int, validResponses int) float64 {
 func NumResponses(stats []ResponseStats) int {
 	numResponses := 0
 	for _, stat := range stats {
-		if (!stat.RespErr) {
+		containsResponse := true
+		for _, failure := range stat.Failures {
+			if _, ok := failure.(RequestExecutionError); ok {
+				containsResponse = false
+			}
+			if _, ok := failure.(StatusCodeError); ok {
+				containsResponse = false
+			}
+		}
+		if (containsResponse) {
 			numResponses += 1
 		}
 	}
@@ -296,20 +304,31 @@ func MaxConcurrency(stats []OverallStats) int {
 func GroupFailures(stats []ResponseStats) (failures int, respErrs int, validationErrs int, failureGroups map[string]int) {
 	failureGroups = make(map[string]int)
 	for _, stat := range stats {
-		if stat.Failure {
-			if stat.RespErr { respErrs += 1}
-			if stat.ValidationErr { validationErrs += 1}
-
-			failures += 1
-			if fails, ok := failureGroups[stat.FailCategory]; ok {
-				failureGroups[stat.FailCategory] = fails + 1
-			} else {
-				failureGroups[stat.FailCategory] = 1
+		if stat.Failure() {
+			for _, failure := range stat.Failures {
+				if fails, ok := failureGroups[failure.Category()]; ok {
+					failureGroups[failure.Category()] = fails + 1
+				} else {
+					failureGroups[failure.Category()] = 1
+				}
 			}
+			failures += 1
 		}
 	}
 	Log("analyse", fmt.Sprintln("Grouped ",failures, " failures into map, ",failureGroups) )
 	return
+}
+
+func DoAnalysis(stat ResponseStats) bool {
+	for _, failure := range stat.Failures {
+		if _, ok := failure.(RequestExecutionError); ok {
+			return false
+		}
+		if _, ok := failure.(StatusCodeError); ok {
+			return false
+		}
+	}
+	return true
 }
 
 func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, maxTimeToRespond time.Duration, maxTimeToConnect time.Duration) {
@@ -317,7 +336,7 @@ func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, m
 	maxTimeToRespondInt := int64(0)
 	maxTimeToConnectInt := int64(0)
 	for _, stat := range stats {
-		if (stat.RespErr) { continue }
+		if (!DoAnalysis(stat)) { continue }
 
 		if (stat.TotalTime.Nanoseconds() > maxTotalTimeInt) {
 			maxTotalTimeInt = stat.TotalTime.Nanoseconds()
@@ -341,7 +360,8 @@ func DetermineMaxLatencies(stats []ResponseStats) (maxTotalTime time.Duration, m
 func DetermineMinLatencies(stats []ResponseStats) (minTotalTime time.Duration) {
 	minTotalTimeInt := int64(0)
 	for _, stat := range stats {
-		if (stat.RespErr) { continue }
+		if (!DoAnalysis(stat)) { continue }
+
 		if (minTotalTimeInt == 0 || stat.TotalTime.Nanoseconds() < minTotalTimeInt) {
 			minTotalTimeInt = stat.TotalTime.Nanoseconds()
 		}
@@ -355,7 +375,8 @@ func MeanLatencies(stats []ResponseStats) (meanTotalTime time.Duration) {
 	totalLatency := int64(0)
 	numSuccesses := 0
 	for _, stat := range stats {
-		if (stat.RespErr) { continue }
+		if (!DoAnalysis(stat)) { continue }
+
 		numSuccesses += 1
 		totalLatency += stat.TotalTime.Nanoseconds()
 	}
@@ -371,7 +392,7 @@ func DeterminePercentilesLatencies(percentiles []float64, stats []ResponseStats)
 	TimeToConnects := []int{}
 
 	for _, stat := range stats {
-		if (stat.RespErr) { continue }
+		if (!DoAnalysis(stat)) { continue }
 
 		TotalTimes = append(TotalTimes, int(stat.TotalTime.Nanoseconds()))
 		TimeToResponds = append(TimeToResponds, int(stat.TimeToRespond.Nanoseconds()))

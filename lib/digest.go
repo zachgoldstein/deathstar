@@ -5,6 +5,7 @@ import (
 	"flag"
 	"runtime"
 	"fmt"
+	"io/ioutil"
 )
 
 type RequestOptions struct {
@@ -58,6 +59,8 @@ var DefaultRequestOptions RequestOptions = RequestOptions{
 	AnalaysisFreqMs : 200,
 
 	RequestsToIssue : 5000,
+
+	JSONSchema : "./lib/exampleSchema.json",
 }
 
 var DefaultOutputOptions OutputOptions = OutputOptions{
@@ -66,6 +69,7 @@ var DefaultOutputOptions OutputOptions = OutputOptions{
 }
 
 var DefaultMode = "scale"
+
 
 // digestOptions will combine command line options and the config json file to create the options objects
 func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
@@ -89,6 +93,9 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 
 	analysisFrequencyMs := flag.Int("analysis", defaultReqOpts.AnalaysisFreqMs, "Time in between each analysis run on the response data")
 	analysisFrequencyTime := time.Duration(*analysisFrequencyMs) * time.Millisecond
+
+	jsonSchemaLocation := flag.String("schema", "", "The location of the schema file")
+	jsonSchema, err := ioutil.ReadFile(*jsonSchemaLocation)
 
 	mode := flag.String("mode", DefaultMode , "'fail' to continually ramp up request speed until failure, 'scale' for a test with consistent load, 'valid' for a test with a single request")
 	Log("top", fmt.Sprintf("Starting in '%v' mode", mode) )
@@ -114,7 +121,7 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 
 		Method : "GET",
 		URL : *url,
-		JSONSchema : testJSONSchema,
+		JSONSchema : string(jsonSchema),
 
 		Rate : *rate,
 		CPUs : *cpus,
@@ -129,41 +136,3 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 		ShowCLI: *showCLI,
 	}, nil
 }
-
-var testJSONSchema = `
-{
-    "$schema": "http://json-schema.org/draft-04/schema#",
-    "title": "Product",
-    "description": "A product from Acme's catalog",
-    "type": "object",
-    "properties": {
-        "id": {
-            "description": "The unique identifier for a product",
-            "type": "integer"
-        },
-        "name": {
-            "description": "Name of the product",
-            "type": "string"
-        },
-        "stringNumber": {
-            "description": "A number from 0-9",
-            "type": "string",
-            "pattern":"[0-9]"
-        },
-        "price": {
-            "type": "number",
-            "minimum": 0,
-            "exclusiveMinimum": true
-        },
-        "tags": {
-            "type": "array",
-            "items": {
-                "type": "string"
-            },
-            "minItems": 1,
-            "uniqueItems": true
-        }
-    },
-    "required": ["id", "name", "price"]
-}
-`

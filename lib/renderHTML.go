@@ -101,8 +101,13 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	r.Data.MaxResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MaxTotalTime.Seconds())
 	r.Data.MinResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MinTotalTime.Seconds())
 	r.Data.AvgResponseTime = fmt.Sprintf("%.4f", r.Data.Latest.MeanTotalTime.Seconds())
-	r.Data.TopPercentileTimeTitle = r.Data.PercentileTitles[len(r.Data.PercentileTitles) - 1]
-	r.Data.TopPercentileTime = fmt.Sprintf("%.4f", r.Data.LatestTotalPercentiles[len(r.Data.LatestTotalPercentiles) - 1])
+
+	if (len(r.Data.PercentileTitles) > 0) {
+		r.Data.TopPercentileTimeTitle = r.Data.PercentileTitles[len(r.Data.PercentileTitles) - 1]
+	}
+	if (len(r.Data.LatestTotalPercentiles) > 0) {
+		r.Data.TopPercentileTime = fmt.Sprintf("%.4f", r.Data.LatestTotalPercentiles[len(r.Data.LatestTotalPercentiles) - 1])
+	}
 
 	r.Data.ThroughputKbs = r.Data.Latest.LatestByteThroughput / 1000.0
 	r.Data.AvgThroughputKbs = fmt.Sprintf("%.4f", r.Data.Latest.AverageByteThroughput / 1000.0)
