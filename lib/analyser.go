@@ -16,6 +16,11 @@ type Analyser struct {
 	StatsChan chan AggregatedStats
 	Percentiles []float64
 
+	Harvest float64
+	Yield float64
+	RespThroughput float64
+	PercentilesLatencies []float64
+
 	StartTime time.Time
 	WarmUpTime time.Duration
 
@@ -71,25 +76,30 @@ type AggregatedStats struct {
 	Failures int
 	RespFailures int
 	ValidationFailures int
-	FailureCounts map[string]int
+	FailureCounts map[string][]DescriptiveError
 
 	TimeToRespond []float64
 	TimeToConnect []float64
 	TotalTime []float64
 
+	OverallFailure bool
+	OverallFailureDescription string
+
 	Rate float64
 }
 
-var defaultPercentiles = []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999, 0.9999}
-
-func NewAnalyser(acc *Accumulator, frequency time.Duration, warmUpTime time.Duration, calcRate bool, percentiles []float64) (*Analyser) {
+func NewAnalyser(acc *Accumulator, reqOpts RequestOptions, calcRate bool) (*Analyser) {
 	analyser := &Analyser{
 		Accumulator : acc,
-		Frequency : frequency,
+		Frequency : reqOpts.AnalaysisFreqTime,
 		StatsChan : make(chan AggregatedStats),
-		Percentiles : percentiles,
-		WarmUpTime : warmUpTime,
+		Percentiles : reqOpts.Percentiles,
+		WarmUpTime : reqOpts.WarmUpTime,
 		CalculateRate : calcRate,
+		Harvest : reqOpts.Harvest,
+		Yield : reqOpts.Yield,
+		RespThroughput : reqOpts.Throughput,
+		PercentilesLatencies : reqOpts.PercentileLatencies,
 	}
 	analyser.Start()
 	return analyser
@@ -134,8 +144,6 @@ func (a *Analyser) Cleanup() {
 }
 
 func (a *Analyser) Analyse() {
-	Log("analyse", fmt.Sprintln("Analysing mock") )
-
 	if (len(a.Accumulator.OverallStats) == 0 || len(a.Accumulator.Stats) == 0) {
 		return
 	}
@@ -163,7 +171,7 @@ func (a *Analyser) Analyse() {
 
 	stats.MaxConcurrentExecutors = MaxConcurrency(stats.OverallStats)
 
-	stats.Failures, stats.RespFailures, stats.ValidationFailures, stats.FailureCounts = GroupFailures(stats.RawStats)
+	stats.Failures, stats.FailureCounts = GroupFailures(stats.RawStats)
 
 	stats.TimeToRespond, stats.TimeToConnect, stats.TotalTime = extractLatencies(stats.RawStats)
 
@@ -188,6 +196,8 @@ func (a *Analyser) Analyse() {
 
 		stats.AverageByteThroughput, stats.AverageRespThroughput = a.AvgThroughput()
 	}
+
+	stats.OverallFailure, stats.OverallFailureDescription = Failure(stats, a.Harvest, a.Yield, a.RespThroughput, a.PercentilesLatencies)
 
 	calcTime := time.Since(now)
 	Log("analyse", fmt.Sprintln(stats.TotalResponses," valid responses received, ", stats.TotalRequests, " requests issued"))
@@ -301,21 +311,20 @@ func MaxConcurrency(stats []OverallStats) int {
 	return max
 }
 
-func GroupFailures(stats []ResponseStats) (failures int, respErrs int, validationErrs int, failureGroups map[string]int) {
-	failureGroups = make(map[string]int)
+func GroupFailures(stats []ResponseStats) (failures int, failureGroups map[string][]DescriptiveError) {
+	failureGroups = make(map[string][]DescriptiveError)
 	for _, stat := range stats {
 		if stat.Failure() {
 			for _, failure := range stat.Failures {
-				if fails, ok := failureGroups[failure.Category()]; ok {
-					failureGroups[failure.Category()] = fails + 1
+				if fails, ok := failureGroups[failure.Error()]; ok {
+					failureGroups[failure.Error()] = append(fails, failure)
 				} else {
-					failureGroups[failure.Category()] = 1
+					failureGroups[failure.Error()] = []DescriptiveError{failure}
 				}
 			}
 			failures += 1
 		}
 	}
-	Log("analyse", fmt.Sprintln("Grouped ",failures, " failures into map, ",failureGroups) )
 	return
 }
 

@@ -42,7 +42,7 @@ func NewChoreographer(reqOpts RequestOptions, outOpts OutputOptions) *Choreograp
 		calcRate = true
 	}
 
-	choreographer.Analyser = NewAnalyser(choreographer.Accumulator, choreographer.RequestOptions.AnalaysisFreqTime, choreographer.RequestOptions.WarmUpTime, calcRate, defaultPercentiles)
+	choreographer.Analyser = NewAnalyser(choreographer.Accumulator, reqOpts, calcRate)
 	choreographer.Reporter = NewReporter(choreographer.Analyser.StatsChan, choreographer.OutputOptions, choreographer.RequestOptions)
 
 	if (choreographer.ExecuteSingleRequest) {

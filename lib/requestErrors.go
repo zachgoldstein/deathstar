@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"net/http"
+	"errors"
 )
 
 type DescriptiveError interface {
@@ -121,4 +122,50 @@ func ValidateSchema(respPayload string, resp *http.Response, schema string) (err
 	}
 
 	return nil
+}
+
+type HeaderValidationError struct {
+	DisplayableError
+	errs []error
+	errMsgs []string
+	Msg string
+	HeadersMissing map[string]string
+}
+
+func (h HeaderValidationError) Error() string {
+	errMsgs := []string{}
+	for _, err := range h.errs {
+		errMsgs = append(errMsgs, err.Error())
+	}
+	sort.Strings(errMsgs)
+	h.errMsgs = errMsgs
+	h.Msg = fmt.Sprint(errMsgs)
+	return h.Msg
+}
+func (h HeaderValidationError) Description() string {
+	return fmt.Sprintf("%v Expected headers are not present in the response", len(h.errs))
+}
+func (h HeaderValidationError) Category() string {
+	return h.category
+}
+
+func NewHeaderValidationError(errs []error) *HeaderValidationError{
+	return &HeaderValidationError{
+		errs : errs,
+		DisplayableError: DisplayableError{category : "Header",},
+	}
+}
+
+func ValidateRespHeaders(headers map[string]string, resp *http.Response) (err DescriptiveError) {
+	errs := []error{}
+	for headerName, headerValue := range headers {
+		respHeaderValue := resp.Header.Get(headerName)
+		if (respHeaderValue != headerValue) {
+			errs = append(errs, errors.New(fmt.Sprintf("Header '%v:%v' could not be found in response", headerName, headerValue)) )
+		}
+	}
+	if (len(errs) > 0) {
+		return *NewHeaderValidationError(errs)
+	}
+	return
 }

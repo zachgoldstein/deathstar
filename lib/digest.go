@@ -6,20 +6,24 @@ import (
 	"runtime"
 	"fmt"
 	"io/ioutil"
+	"strings"
+	"strconv"
+	"errors"
 )
 
 type RequestOptions struct {
+
+	//Request control params
 	URL string
 	Method string
 	Headers map[string]string
+	Payload []byte
 	Timeout time.Duration
 	KeepAlive time.Duration
 	EnableKeepAlive bool
 	TLSHandshakeTimeout time.Duration
 
-	Payload []byte
-	JSONSchema string
-
+	//Execution control params
 	Rate float64
 	CPUs int
 	RequestsToIssue int
@@ -37,6 +41,17 @@ type RequestOptions struct {
 	AnalaysisFreqMs int
 	AnalaysisFreqTime time.Duration
 
+	//Failure detection params
+	Harvest float64
+	Yield float64
+	Throughput float64
+	PercentileLatencies []float64
+	Percentiles []float64
+	ResponseCode int
+
+	//Validation params
+	JSONSchema string
+	RespHeaders map[string]string
 }
 
 type OutputOptions struct {
@@ -45,6 +60,10 @@ type OutputOptions struct {
 }
 
 var DefaultRequestOptions RequestOptions = RequestOptions{
+	URL : "http://localhost:8080/test/success",
+	Method : "GET",
+	ResponseCode : 200,
+
 	Timeout : time.Second * 2,
 	KeepAlive : time.Second * 2,
 	EnableKeepAlive : false,
@@ -55,10 +74,15 @@ var DefaultRequestOptions RequestOptions = RequestOptions{
 
 	MaxExecutionSecs : 5,
 	WarmUpSecs : 2,
+	Percentiles : []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999, 0.9999},
 
 	AnalaysisFreqMs : 200,
 
 	RequestsToIssue : 5000,
+
+	Harvest : 85,
+	Yield : 85,
+	Throughput: 5,
 
 	JSONSchema : "./lib/exampleSchema.json",
 }
@@ -76,7 +100,19 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 	defaultReqOpts := DefaultRequestOptions
 	defaultOutOpts := DefaultOutputOptions
 
-	url := flag.String("url", "http://localhost:8080/test/success", "the url to test")
+	//Request control params
+	url := flag.String("url", defaultReqOpts.URL , "the url to test")
+	method := flag.String("method", defaultReqOpts.Method , "the url method to use")
+	defaultHeaders := fmt.Sprintf("%v",defaultReqOpts.Headers)
+	reqHeaderStr := flag.String("headers", defaultHeaders , "Requests headers for requests, in the form of a comma separated list; 'Max-Forwards:10,Accept-Charset:utf-8'")
+
+	//Validation params
+	jsonSchemaLocation := flag.String("schema", defaultReqOpts.JSONSchema, "The location of the schema file")
+
+	defaultRespHeaders := fmt.Sprintf("%v",defaultReqOpts.RespHeaders)
+	respHeaderStr := flag.String("respheaders", defaultRespHeaders, "Response headers to validate in responses, in the form of a comma separated list; 'Max-Forwards:10,Accept-Charset:utf-8'")
+
+	//Execution control params
 	showCLI := flag.Bool("cli", defaultOutOpts.ShowCLI, "show fancy cli")
 	showHTML := flag.Bool("html", defaultOutOpts.ShowHTML, "serve fancy html")
 	rate := flag.Float64("rate", defaultReqOpts.Rate, "req/s to issue")
@@ -86,19 +122,50 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 	keepAlive := flag.Bool("keepalive", defaultReqOpts.EnableKeepAlive, "Execute with keep alive")
 
 	executionSecs := flag.Int("time", defaultReqOpts.MaxExecutionSecs, "Maximum time (in secs) to execute the test")
-	executionTime := time.Duration(*executionSecs) * time.Second
 
 	warmUpSecs := flag.Int("warmup", defaultReqOpts.WarmUpSecs, "Time until analysis starts")
-	warmUpTime := time.Duration(*warmUpSecs) * time.Second
 
 	analysisFrequencyMs := flag.Int("analysis", defaultReqOpts.AnalaysisFreqMs, "Time in between each analysis run on the response data")
-	analysisFrequencyTime := time.Duration(*analysisFrequencyMs) * time.Millisecond
 
-	jsonSchemaLocation := flag.String("schema", "", "The location of the schema file")
-	jsonSchema, err := ioutil.ReadFile(*jsonSchemaLocation)
+	//Failure detection params
+	expectedResponseCode := flag.Int("responsecode", defaultReqOpts.ResponseCode, "The expected response code for all requests")
+	failureHarvest := flag.Float64("harvest", defaultReqOpts.Harvest, "The expected harvest % (percentage of requests that should get a response), below this value indicates a test failure")
+	failureYield := flag.Float64("yield", defaultReqOpts.Yield, "The expected yield % (percentage of responses that should validate), below this value indicates a test failure")
+	failureThroughput := flag.Float64("throughput", defaultReqOpts.Throughput, "The expected resp/s that should be returned by the test, below this value indicates a test failure")
+
+	defaultPercentileLatencies := fmt.Sprintf("%v",defaultReqOpts.PercentileLatencies)
+	failurePercentilesString := flag.String("percentiles", defaultPercentileLatencies , "The expected percentile latencies (in the form of a comma separated list) to achieve in the test, latencies below these values indicate a test failure. Latencies are for the 1, 5, 25, 50, 75, 95, 99, 99.9, 99.99 percentiles")
 
 	mode := flag.String("mode", DefaultMode , "'fail' to continually ramp up request speed until failure, 'scale' for a test with consistent load, 'valid' for a test with a single request")
-	Log("top", fmt.Sprintf("Starting in '%v' mode", mode) )
+	Log("top", fmt.Sprintf("Starting in '%v' mode", *mode) )
+
+	flag.Parse()
+
+	reqHeaders, err := parseHeaders(*reqHeaderStr)
+	if (err != nil) {
+		return
+	}
+
+	fmt.Printf("INPUT HEADERS: %v \n",*respHeaderStr)
+	respHeaders, err := parseHeaders(*respHeaderStr)
+	if (err != nil) {
+		return
+	}
+
+	jsonSchema, err := ioutil.ReadFile(*jsonSchemaLocation)
+	if (err != nil) {
+		return reqOpts, outOpts, errors.New(fmt.Sprintf("Could not load schema file at %v err: %v",*jsonSchemaLocation, err))
+	}
+
+	executionTime := time.Duration(*executionSecs) * time.Second
+	warmUpTime := time.Duration(*warmUpSecs) * time.Second
+
+	analysisFrequencyTime := time.Duration(*analysisFrequencyMs) * time.Millisecond
+
+	failurePercentiles, err := parsePercentiles(*failurePercentilesString, defaultReqOpts.Percentiles)
+	if (err != nil) {
+		return
+	}
 
 	if (*mode == "fail") {
 		reqOpts.IncreaseRateToFailure = true
@@ -107,21 +174,25 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 		reqOpts.ExecuteSingleRequest = true
 	}
 
-	flag.Parse()
-
 	if *showCLI {
 		showLogs = false
 	}
 
 	return RequestOptions{
+		//Request control params
+		Method : *method,
+		URL : *url,
+		Headers : reqHeaders,
+
+		//Validation params
+		JSONSchema : string(jsonSchema),
+		RespHeaders : respHeaders,
+
+		//Execution control params
 		Timeout : defaultReqOpts.Timeout,
 		KeepAlive : defaultReqOpts.KeepAlive,
 		EnableKeepAlive : *keepAlive,
 		TLSHandshakeTimeout : defaultReqOpts.TLSHandshakeTimeout,
-
-		Method : "GET",
-		URL : *url,
-		JSONSchema : string(jsonSchema),
 
 		Rate : *rate,
 		CPUs : *cpus,
@@ -131,8 +202,49 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 		MaxExecutionTime : executionTime,
 		WarmUpTime : warmUpTime,
 		AnalaysisFreqTime : analysisFrequencyTime,
+
+		//Failure detection params
+		ResponseCode: *expectedResponseCode,
+		Harvest: *failureHarvest,
+		Yield: *failureYield,
+		Throughput: *failureThroughput,
+		PercentileLatencies: failurePercentiles,
+		Percentiles : defaultReqOpts.Percentiles,
+
 	}, OutputOptions {
 		ShowHTML : *showHTML,
 		ShowCLI: *showCLI,
 	}, nil
+}
+
+func parsePercentiles(rawPercentileLatency string, percentiles []float64) (percentileLatencies []float64, err error) {
+	rawPercentileLatency = strings.TrimPrefix(rawPercentileLatency, "[")
+	rawPercentileLatency = strings.TrimSuffix(rawPercentileLatency, "]")
+	percArr := strings.Split(rawPercentileLatency, ",")
+	for _, percStr := range percArr {
+		if (percStr == "") { continue }
+		perc, err := strconv.ParseFloat(percStr, 64)
+		if err != nil {
+			return percentileLatencies, err
+		}
+		percentileLatencies = append(percentileLatencies, perc)
+	}
+	return
+}
+
+func parseHeaders(headerStr string) (headers map[string]string, err error) {
+	headers = make(map[string]string)
+	headerStr = strings.TrimPrefix(headerStr, "map")
+	headerStr = strings.TrimPrefix(headerStr, "[")
+	headerStr = strings.TrimSuffix(headerStr, "]")
+	headerStrs := strings.Split(headerStr, ",")
+	for _, rawHeader := range headerStrs {
+		if (rawHeader == "") { continue }
+		header := strings.Split(rawHeader, ":")
+		if (len(header) != 2) {
+			return headers, errors.New(fmt.Sprintf("There was an error parsing header, %v",rawHeader))
+		}
+		headers[header[0]] = header[1]
+	}
+	return
 }

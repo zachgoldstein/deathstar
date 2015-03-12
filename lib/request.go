@@ -38,6 +38,10 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 		req.Close = true
 	}
 
+	for headerName, headerValue := range r.RequestOptions.Headers {
+		req.Header.Add(headerName, headerValue)
+	}
+
 	if (err != nil) {
 		return ResponseStats {
 			TimeToConnect: r.ConnectionTime,
@@ -70,7 +74,12 @@ func (r *RequestRecorder) PerformRequest() (respStats ResponseStats, err error){
 
 	failures := []DescriptiveError{}
 
-	statusFailure := ValidateStatusCode(200, resp)
+	respHeaderError := ValidateRespHeaders(r.RequestOptions.RespHeaders, resp)
+	if (respHeaderError != nil) {
+		failures = append(failures, respHeaderError)
+	}
+
+	statusFailure := ValidateStatusCode(r.RequestOptions.ResponseCode, resp)
 	if (statusFailure != nil) {
 		failures = append(failures, statusFailure)
 	}
@@ -163,30 +172,3 @@ func (r *RequestRecorder) isolatePayloads (req *http.Request, resp *http.Respons
 
 	return string(reqPayload), string(respPayload), err
 }
-
-//func (r *RequestRecorder) validateResponse(respPayload string, resp *http.Response, schema string) (valid bool, validationErr bool, respErr bool, failCategory string, err error) {
-//	if resp.StatusCode != 200 {
-//		return false, false, true, resp.Status, nil
-//	}
-//
-//	responseLoader := gojsonschema.NewStringLoader(respPayload)
-//	schemaLoader := gojsonschema.NewStringLoader(schema)
-//	res, err := gojsonschema.Validate(schemaLoader, responseLoader)
-//	if (err != nil) {
-//		return false, true, false, err.Error(), err
-//	}
-//
-//	Log("debug", "VALID RESPONSE? ",res)
-//
-//	if !res.Valid() {
-//		errors := []string{}
-//		for _, validateError := range res.Errors() {
-//			errors = append(errors, fmt.Sprintf("Validation Error: %v", validateError))
-//		}
-//		sort.Strings(errors)
-//
-//		return false, true, false, fmt.Sprint(errors), nil
-//	}
-//
-//	return true, false, false, "", nil
-//}

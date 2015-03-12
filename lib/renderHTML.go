@@ -45,6 +45,8 @@ type RenderData struct {
 	ThroughputKbs float64
 	AvgThroughputKbs string
 	AvgThroughputResps string
+
+	FailureMap map[string]int
 }
 
 func NewRenderHTML(reqOpts RequestOptions) *RenderHTML {
@@ -112,6 +114,13 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	r.Data.ThroughputKbs = r.Data.Latest.LatestByteThroughput / 1000.0
 	r.Data.AvgThroughputKbs = fmt.Sprintf("%.4f", r.Data.Latest.AverageByteThroughput / 1000.0)
 	r.Data.AvgThroughputResps = fmt.Sprintf("%.4f", r.Data.Latest.AverageRespThroughput)
+
+	r.Data.FailureMap = make(map[string]int)
+	for _, failures := range r.Data.Latest.FailureCounts {
+		if (len(failures) > 1) {
+			r.Data.FailureMap[failures[0].Error()] = len(failures)
+		}
+	}
 }
 
 func (r *RenderHTML) Render() {

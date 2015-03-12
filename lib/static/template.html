@@ -58,6 +58,8 @@
             </div>
             <div class="chart-stage">
                 <h3>{{.ModeDesc}}</h3>
+                <p>{{.Latest.OverallFailure}}</p>
+                <p>{{.Latest.OverallFailureDescription}}</p>
             </div>
         </div>
     </div>
@@ -382,7 +384,7 @@
                     </tr>
                     </thead>
                     <tbody>
-                    {{range $error, $count := .Latest.FailureCounts}}
+                    {{range $error, $count := .FailureMap}}
                     <tr>
                         <td>{{$count}}</td>
                         <td>{{$error}}</td>
