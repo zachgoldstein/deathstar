@@ -5,12 +5,19 @@ import (
 	"io/ioutil"
 	"bytes"
 	"fmt"
+	"net/http"
+	"time"
+	socketio     "github.com/googollee/go-socket.io"
+	"encoding/json"
 )
 
 type RenderHTML struct {
 	Port int
 	Done chan bool
 	Data RenderData
+
+	DataSendFrequency time.Duration
+	DataSendTicker *time.Ticker
 }
 
 type RenderData struct {
@@ -33,11 +40,19 @@ type RenderData struct {
 	ProgressBarCurrent int64
 	PercentageComplete string
 
+	ReqProgressBarMax int
+	ReqProgressBarCurrent int
+	ReqBarText string
+	ReqPercentageComplete string
+
 	MaxResponseTime string
 	AvgResponseTime string
 	TopPercentileTime string
 	TopPercentileTimeTitle string
 	MinResponseTime string
+
+	TimeElapsed string
+	TotalTime string
 
 	Yield string
 	Harvest string
@@ -51,6 +66,7 @@ type RenderData struct {
 
 func NewRenderHTML(reqOpts RequestOptions) *RenderHTML {
 	return &RenderHTML{
+		DataSendTicker : time.NewTicker(reqOpts.RenderFrequency),
 		Data : RenderData{
 			ReqOpts : reqOpts,
 		},
@@ -59,6 +75,7 @@ func NewRenderHTML(reqOpts RequestOptions) *RenderHTML {
 
 func (r *RenderHTML) Setup(done chan bool) {
 	r.Done = done
+	go r.StartSocketServer()
 }
 
 func (r *RenderHTML) Generate(stats AggregatedStats) {
@@ -97,6 +114,12 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	r.Data.ProgressBarCurrent = r.Data.Latest.TimeElapsed.Nanoseconds()
 	r.Data.PercentageComplete = fmt.Sprintf("%.2f", ( float64(r.Data.ProgressBarCurrent) / float64(r.Data.ProgressBarMax) ) * 100)
 
+	r.Data.ReqProgressBarMax = r.Data.ReqOpts.RequestsToIssue
+	r.Data.ReqProgressBarCurrent = r.Data.Latest.TotalResponses
+	r.Data.ReqPercentageComplete = fmt.Sprintf("%.2f", ( float64(r.Data.ReqProgressBarCurrent) / float64(r.Data.ReqProgressBarMax) ) * 100)
+	r.Data.ReqBarText = fmt.Sprintf("%v of %v Reqs Executed", r.Data.ReqProgressBarCurrent, r.Data.ReqProgressBarMax)
+
+
 	r.Data.Yield = fmt.Sprintf("%.2f", r.Data.Latest.Yield)
 	r.Data.Harvest = fmt.Sprintf("%.2f", r.Data.Latest.Harvest)
 
@@ -115,12 +138,36 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 	r.Data.AvgThroughputKbs = fmt.Sprintf("%.4f", r.Data.Latest.AverageByteThroughput / 1000.0)
 	r.Data.AvgThroughputResps = fmt.Sprintf("%.4f", r.Data.Latest.AverageRespThroughput)
 
+	r.Data.TimeElapsed = r.Data.Latest.TimeElapsed.String()
+	r.Data.TotalTime = r.Data.Latest.TotalTestDuration.String()
+
 	r.Data.FailureMap = make(map[string]int)
 	for _, failures := range r.Data.Latest.FailureCounts {
 		if (len(failures) > 1) {
 			r.Data.FailureMap[failures[0].Error()] = len(failures)
 		}
 	}
+}
+
+func (r *RenderHTML) GeneratePercentiles(stats AggregatedStats) (connectOutput, totalOutput, responseOutput []float64){
+	if (stats.TotalRequests == 0 ){
+		return connectOutput, totalOutput, responseOutput
+	}
+	for index, _ := range stats.Percentiles {
+
+		//TODO: Hack to deal with issue in percentile generation.... fix that.
+		if (len(stats.TimeToConnectPercentiles) -1 < index ||
+				len(stats.TotalTimePercentiles) -1 < index ||
+				len(stats.TimeToRespondPercentiles) -1 < index ) {
+			break
+		}
+
+		connectOutput = append(connectOutput, stats.TimeToConnectPercentiles[index].Seconds() )
+		totalOutput = append(totalOutput, stats.TotalTimePercentiles[index].Seconds() )
+		responseOutput = append(responseOutput, stats.TimeToRespondPercentiles[index].Seconds() )
+	}
+
+	return connectOutput, totalOutput, responseOutput
 }
 
 func (r *RenderHTML) Render() {
@@ -148,27 +195,58 @@ func (r *RenderHTML) Render() {
 	Log("reporter","HTML output rendered")
 }
 
-func (r *RenderHTML)Quit() {
+func (re *RenderHTML)frontendClient (so socketio.Socket) {
+
+	Log("all", "Received connection message")
+	err := so.Join("data")
+	err = so.Emit("event","testing???")
+	if (err != nil) {
+		Log("all", "Error occurred joining data room")
+	}
+	//Send data periodically to frontend
+	go func(so socketio.Socket){
+		for _ = range re.DataSendTicker.C{
+			data, err := json.Marshal(re.Data)
+			if err != nil {
+				Log("all", "could not marshall data? ",err.Error())
+				return
+			}
+
+			err = so.BroadcastTo("data","event",string(data))
+			if err != nil {
+				Log("all", "could not broadcast message? ",err.Error())
+				return
+			}
+		}
+	}(so)
+
 
 }
 
-func (r *RenderHTML) GeneratePercentiles(stats AggregatedStats) (connectOutput, totalOutput, responseOutput []float64){
-	if (stats.TotalRequests == 0 ){
-		return connectOutput, totalOutput, responseOutput
+func (r *RenderHTML)StartSocketServer() (err error) {
+	server, err := socketio.NewServer(nil)
+	if err != nil {
+		return err
 	}
-	for index, _ := range stats.Percentiles {
+	server.On("connection", r.frontendClient)
+	server.On("error", func(so socketio.Socket, err error) {
+		Log("all","An error occurred serving a frontend socket ", err.Error())
+	})
 
-		//TODO: Hack to deal with issue in percentile generation.... fix that.
-		if (len(stats.TimeToConnectPercentiles) -1 < index ||
-			len(stats.TotalTimePercentiles) -1 < index ||
-			len(stats.TimeToRespondPercentiles) -1 < index ) {
-			break
-		}
+	http.HandleFunc("/socket.io/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "null")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		server.ServeHTTP(w, r)
+	})
 
-		connectOutput = append(connectOutput, stats.TimeToConnectPercentiles[index].Seconds() )
-		totalOutput = append(totalOutput, stats.TotalTimePercentiles[index].Seconds() )
-		responseOutput = append(responseOutput, stats.TimeToRespondPercentiles[index].Seconds() )
+	Log("all","Serving frontend socket connections at localhost:8081...")
+	err = http.ListenAndServe(":8081", nil)
+	if err != nil {
+		return err
 	}
+	return
+}
 
-	return connectOutput, totalOutput, responseOutput
+func (r *RenderHTML)Quit() {
+
 }

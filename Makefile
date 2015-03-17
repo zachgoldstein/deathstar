@@ -10,6 +10,7 @@ deps:
 	go get github.com/aybabtme/uniplot/histogram
 	go get github.com/jroimartin/gocui
 	go get github.com/cheggaaa/pb
+	go get import github.com/googollee/go-socket.io
 
 test:
 	go test ${FILES} -v

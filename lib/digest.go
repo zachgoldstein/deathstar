@@ -24,6 +24,8 @@ type RequestOptions struct {
 	TLSHandshakeTimeout time.Duration
 
 	//Execution control params
+	Mode string
+
 	Rate float64
 	CPUs int
 	RequestsToIssue int
@@ -40,6 +42,9 @@ type RequestOptions struct {
 
 	AnalaysisFreqMs int
 	AnalaysisFreqTime time.Duration
+
+	RenderFrequencyMs int
+	RenderFrequency time.Duration
 
 	//Failure detection params
 	Harvest float64
@@ -60,7 +65,7 @@ type OutputOptions struct {
 }
 
 var DefaultRequestOptions RequestOptions = RequestOptions{
-	URL : "http://localhost:8080/test/success",
+	URL : "http://localhost:8080/test/fail/validate",
 	Method : "GET",
 	ResponseCode : 200,
 
@@ -72,11 +77,12 @@ var DefaultRequestOptions RequestOptions = RequestOptions{
 	Rate : 10,
 	Concurrency: 5,
 
-	MaxExecutionSecs : 5,
+	MaxExecutionSecs : 30*60,
 	WarmUpSecs : 2,
 	Percentiles : []float64{0.01, 0.05, 0.25, 0.50, 0.75, 0.95, 0.99, 0.999, 0.9999},
 
 	AnalaysisFreqMs : 200,
+	RenderFrequencyMs : 400,
 
 	RequestsToIssue : 5000,
 
@@ -126,6 +132,7 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 	warmUpSecs := flag.Int("warmup", defaultReqOpts.WarmUpSecs, "Time until analysis starts")
 
 	analysisFrequencyMs := flag.Int("analysis", defaultReqOpts.AnalaysisFreqMs, "Time in between each analysis run on the response data")
+	renderFrequencyMs := flag.Int("render", defaultReqOpts.RenderFrequencyMs, "Time in between each push of data to the frontend")
 
 	//Failure detection params
 	expectedResponseCode := flag.Int("responsecode", defaultReqOpts.ResponseCode, "The expected response code for all requests")
@@ -161,6 +168,7 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 	warmUpTime := time.Duration(*warmUpSecs) * time.Second
 
 	analysisFrequencyTime := time.Duration(*analysisFrequencyMs) * time.Millisecond
+	renderFrequencyTime := time.Duration(*renderFrequencyMs) * time.Millisecond
 
 	failurePercentiles, err := parsePercentiles(*failurePercentilesString, defaultReqOpts.Percentiles)
 	if (err != nil) {
@@ -189,6 +197,7 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 		RespHeaders : respHeaders,
 
 		//Execution control params
+		Mode : *mode,
 		Timeout : defaultReqOpts.Timeout,
 		KeepAlive : defaultReqOpts.KeepAlive,
 		EnableKeepAlive : *keepAlive,
@@ -202,6 +211,7 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 		MaxExecutionTime : executionTime,
 		WarmUpTime : warmUpTime,
 		AnalaysisFreqTime : analysisFrequencyTime,
+		RenderFrequency : renderFrequencyTime,
 
 		//Failure detection params
 		ResponseCode: *expectedResponseCode,

@@ -33,7 +33,7 @@ type Analyser struct {
 	ThroughputResps []float64
 }
 
-const throughputFrequency = time.Millisecond * 100
+const throughputFrequency = time.Millisecond * 500
 
 type AggregatedStats struct {
 	RawStats []ResponseStats
