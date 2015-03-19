@@ -80,27 +80,7 @@
 </div>
 
 <div class="container-fluid section" id="summary">
-    <!--
-        req rate
-        current throughput resp/s
-        mean throughput resp/s
-
-        # failures
-        % responses
-        % valid responses
-
-        min resp time
-        99.99th resp time
-        max resp time
-
-        total Latency percentiles chart
-
-
-
-    -->
-
     <div class="row">
-
         <div class="col-sm-4 col-md-4">
             <div class="chart-wrapper">
                 <div class="chart-title">
@@ -162,7 +142,7 @@
                     % Requests with Responses
                 </div>
                 <div class="chart-stage text-center">
-                    <h2 id="resp-perc"></h2>
+                    <h2 class="resp-perc"></h2>
                 </div>
             </div>
         </div>
@@ -172,7 +152,7 @@
                     % Valid Responses
                 </div>
                 <div class="chart-stage text-center">
-                    <h2 id="valid-resp-perc"></h2>
+                    <h2 class="valid-resp-perc"></h2>
                 </div>
             </div>
         </div>
@@ -573,12 +553,32 @@
             </div>
         </div>
     </div>
-
 </div>
 
-
-
 <div class="container-fluid section" id="failures">
+    <div class="row">
+        <div class="col-sm-6 col-md-6">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    % Requests with Responses
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 class="resp-perc"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-6 col-md-6">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    % Valid Responses
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 class="valid-resp-perc"></h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div class="row">
         <div class="col-sm-12 col-md-12">
             <div class="chart-wrapper">
