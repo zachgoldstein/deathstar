@@ -11,7 +11,8 @@ func Log(logType string, toPrint ...interface{}) {
 	}
 }
 
-var acceptableLogTypes = []string{"all", "temp", "analyse", "top", "spawn"}
+var acceptableLogTypes = []string{}
+//var acceptableLogTypes = []string{"all", "temp", "analyse", "top", "spawn"}
 var showLogs = true
 
 func containsSubstring(logType string) bool {

@@ -95,7 +95,7 @@ var DefaultRequestOptions RequestOptions = RequestOptions{
 
 var DefaultOutputOptions OutputOptions = OutputOptions{
 	ShowHTML : true,
-	ShowCLI : false,
+	ShowCLI : true,
 }
 
 var DefaultMode = "scale"
@@ -153,7 +153,6 @@ func digestOptions()(reqOpts RequestOptions, outOpts OutputOptions, err error) {
 		return
 	}
 
-	fmt.Printf("INPUT HEADERS: %v \n",*respHeaderStr)
 	respHeaders, err := parseHeaders(*respHeaderStr)
 	if (err != nil) {
 		return

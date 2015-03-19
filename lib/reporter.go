@@ -15,7 +15,7 @@ type Reporter struct {
 
 	LatestSummary string
 
-	Renderer Renderer
+	Renderers []Renderer
 }
 
 type Renderer interface {
@@ -37,16 +37,18 @@ func NewReporter(dataChan chan AggregatedStats, opts OutputOptions, reqOpts Requ
 
 	//TODO: add support for multiple renderers at one time
 	if reporter.RenderHTML {
-		reporter.Renderer = NewRenderHTML(reqOpts)
-		reporter.Renderer.Setup(reporter.Done)
-
-	} else if reporter.RenderCLI {
-		reporter.Renderer = NewRenderCLI(reqOpts)
-		reporter.Renderer.Setup(reporter.Done)
+		renderer := NewRenderHTML(reqOpts)
+		renderer.Setup(reporter.Done)
+		reporter.Renderers = append(reporter.Renderers, renderer)
+		reporter.Start()
 	}
-	//TODO: add simple output
 
-	reporter.Start()
+	if reporter.RenderCLI {
+		renderer := NewRenderCLI(reqOpts)
+		renderer.Setup(reporter.Done)
+		reporter.Renderers = append(reporter.Renderers, renderer)
+		reporter.Start()
+	}
 
 	return reporter
 }
@@ -60,20 +62,28 @@ func (r *Reporter) chanSetup() {
 	for data := range r.DataChan {
 		counter += 1
 		r.mu.Lock()
+
 		r.LatestData = data
-		r.Renderer.Generate(r.LatestData)
-		r.Renderer.Render()
+		for _, renderer := range r.Renderers {
+			renderer.Generate(r.LatestData)
+			renderer.Render()
+		}
+
 		r.mu.Unlock()
 	}
 }
 
 func (r *Reporter) Cleanup() {
-	r.Renderer.Generate(r.LatestData)
-	r.Renderer.Render()
+	for _, renderer := range r.Renderers {
+		renderer.Generate(r.LatestData)
+		renderer.Render()
+	}
 }
 
 func (r *Reporter) Stop() {
 	if (r.RenderCLI) {
-		r.Renderer.Quit()
+		for _, renderer := range r.Renderers {
+			renderer.Quit()
+		}
 	}
 }
