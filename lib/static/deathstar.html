@@ -39,7 +39,6 @@
                     <li><a id="throughput-btn" href="#throughput">Throughput</a></li>
                     <li><a id="latencies-btn" href="#latencies">Response Latency</a></li>
                     <li><a id="failures-btn" href="#failures">Failures</a></li>
-                    <li><a id="reqResp-btn" href="#reqResp">Req/Resp Details</a></li>
                     <li><a id="raw-btn" href="#raw">Raw</a></li>
                 </ul>
             </div><!--/.nav-collapse -->
@@ -59,6 +58,156 @@
         </div>
     </div>
 </div>
+
+<div class="container-fluid section" id="summary">
+    <!--
+        req rate
+        current throughput resp/s
+        mean throughput resp/s
+
+        # failures
+        % responses
+        % valid responses
+
+        min resp time
+        99.99th resp time
+        max resp time
+
+        total Latency percentiles chart
+
+
+
+    -->
+
+    <div class="row">
+
+        <div class="col-sm-4 col-md-4">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Req Rate
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 class="req-rate"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4 col-md-4">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Current Throughput (resp/s)
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 class="throughput-resp"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4 col-md-4">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Mean Throughput (resp/s)
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 class="mean-throughput-resp"></h2>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="row">
+        <div class="col-sm-3 col-md-3">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Requests
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 id="requests-total"></h2>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-sm-3 col-md-3">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Failures
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 id="failure-total"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-3 col-md-3">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    % Requests with Responses
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 id="resp-perc"></h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-3 col-md-3">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    % Valid Responses
+                </div>
+                <div class="chart-stage text-center">
+                    <h2 id="valid-resp-perc"></h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-sm-4 col-md-4">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Maximum Response Time
+                </div>
+                <div class="chart-stage text-center">
+                    <h1 class="max-response-time"></h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4 col-md-4">
+            <div class="chart-wrapper">
+                <div class="chart-title top-percentile-title">
+                    Response Time
+                </div>
+                <div class="chart-stage text-center">
+                    <h1 class="top-percentile-time"></h1>
+                </div>
+            </div>
+        </div>
+        <div class="col-sm-4 col-md-4">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Minimum Response Time
+                </div>
+                <div class="chart-stage text-center">
+                    <h1 class="min-response-time"></h1>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-sm-12 col-md-12">
+            <div class="chart-wrapper">
+                <div class="chart-title">
+                    Total Latency Percentiles
+                </div>
+                <div class="chart-stage">
+                    <div id="total-latency-chart-1"></div>
+                </div>
+                <div class="chart-notes  latency-chart">
+                    (Latencies in seconds)
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 
 <div class="container-fluid section" id="options">
     <div class="row">
@@ -232,7 +381,7 @@
                     Req Rate
                 </div>
                 <div class="chart-stage text-center">
-                    <h2 id="req-rate"></h2>
+                    <h2 class="req-rate"></h2>
                 </div>
             </div>
         </div>
@@ -252,7 +401,7 @@
                     Current Throughput (resp/s)
                 </div>
                 <div class="chart-stage text-center">
-                    <h2 id="throughput-resp"></h2>
+                    <h2 class="throughput-resp"></h2>
                 </div>
             </div>
         </div>
@@ -262,7 +411,7 @@
                     Mean Throughput (resp/s)
                 </div>
                 <div class="chart-stage text-center">
-                    <h2 id="mean-throughput-resp"></h2>
+                    <h2 class="mean-throughput-resp"></h2>
                 </div>
             </div>
         </div>
@@ -287,6 +436,8 @@
                 <div class="chart-stage">
                     <div id="throughput-resp-chart"></div>
                 </div>
+                <div class="chart-notes throughput-chart-note">
+                </div>
             </div>
         </div>
 
@@ -297,6 +448,8 @@
                 </div>
                 <div class="chart-stage">
                     <div id="throughput-kb-chart"></div>
+                </div>
+                <div class="chart-notes throughput-chart-note">
                 </div>
             </div>
         </div>
@@ -313,7 +466,7 @@
                     Maximum Response Time
                 </div>
                 <div class="chart-stage text-center">
-                    <h1 id="max-response-time"></h1>
+                    <h1 class="max-response-time"></h1>
                 </div>
             </div>
         </div>
@@ -329,11 +482,11 @@
         </div>
         <div class="col-sm-4 col-md-3">
             <div class="chart-wrapper">
-                <div id="top-percentile-title" class="chart-title">
+                <div class="chart-title top-percentile-title">
                     Response Time
                 </div>
                 <div class="chart-stage text-center">
-                    <h1 id="top-percentile-time"></h1>
+                    <h1 class="top-percentile-time"></h1>
                 </div>
             </div>
         </div>
@@ -343,7 +496,7 @@
                     Minimum Response Time
                 </div>
                 <div class="chart-stage text-center">
-                    <h1 id="min-response-time"></h1>
+                    <h1 class="min-response-time"></h1>
                 </div>
             </div>
         </div>
@@ -356,10 +509,7 @@
                     Total Latency Percentiles
                 </div>
                 <div class="chart-stage">
-                    <div id="total-latency-chart"></div>
-                </div>
-                <div class="chart-notes">
-                    (Latencies in seconds)
+                    <div id="total-latency-chart-2"></div>
                 </div>
             </div>
         </div>
@@ -370,9 +520,6 @@
                 </div>
                 <div class="chart-stage">
                     <div id="connect-latency-chart"></div>
-                </div>
-                <div class="chart-notes">
-                    (Latencies in seconds)
                 </div>
             </div>
         </div>
@@ -387,7 +534,7 @@
                 <div class="chart-stage">
                     <div id="total-latency-histogram"></div>
                 </div>
-                <div class="chart-notes">
+                <div class="chart-notes histogram">
                     (Latencies in seconds)
                 </div>
             </div>
@@ -400,7 +547,7 @@
                 <div class="chart-stage">
                     <div id="connect-latency-histogram"></div>
                 </div>
-                <div class="chart-notes">
+                <div class="chart-notes histogram">
                     (Latencies in seconds)
                 </div>
             </div>

@@ -1,14 +1,12 @@
 package lib
 
 import (
-	"html/template"
-	"io/ioutil"
-	"bytes"
 	"fmt"
 	"net/http"
 	"time"
 	socketio     "github.com/googollee/go-socket.io"
 	"encoding/json"
+	"math"
 )
 
 type RenderHTML struct {
@@ -33,8 +31,15 @@ type RenderData struct {
  	LatestResponsePercentiles []float64
 	PercentileTitles []string
 
-	TotalHistogramTimes []float64
-	ConnectionHistogramTimes []float64
+	SampledRespThroughputs []float64
+	RespThroughPutSampling float64
+	SampledByteThroughputs []float64
+	ByteThroughPutSampling float64
+
+	SampledConnectionLatencies []float64
+	ConnectionLatencySampling float64
+	SampledResponseLatencies []float64
+	ResponseLatencySampling float64
 
 	ProgressBarMax int64
 	ProgressBarCurrent int64
@@ -57,7 +62,6 @@ type RenderData struct {
 	Yield string
 	Harvest string
 
-	ThroughputKbs float64
 	AvgThroughputKbs string
 	AvgThroughputResps string
 
@@ -100,16 +104,6 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 		r.Data.PercentileTitles = append(r.Data.PercentileTitles, fmt.Sprintf("%vth ",percentile * 100))
 	}
 
-	r.Data.TotalHistogramTimes = []float64{}
-	for _, latency := range r.Data.Latest.TimeToRespond {
-		r.Data.TotalHistogramTimes = append(r.Data.TotalHistogramTimes, latency / 1000 / 1000 / 1000)
-	}
-
-	r.Data.ConnectionHistogramTimes = []float64{}
-	for _, latency := range r.Data.Latest.TimeToConnect {
-		r.Data.ConnectionHistogramTimes = append(r.Data.ConnectionHistogramTimes, latency / 1000 / 1000 / 1000)
-	}
-
 	r.Data.ProgressBarMax = r.Data.Latest.TotalTestDuration.Nanoseconds()
 	r.Data.ProgressBarCurrent = r.Data.Latest.TimeElapsed.Nanoseconds()
 	r.Data.PercentageComplete = fmt.Sprintf("%.2f", ( float64(r.Data.ProgressBarCurrent) / float64(r.Data.ProgressBarMax) ) * 100)
@@ -134,20 +128,52 @@ func (r *RenderHTML) Generate(stats AggregatedStats) {
 		r.Data.TopPercentileTime = fmt.Sprintf("%.4f", r.Data.LatestTotalPercentiles[len(r.Data.LatestTotalPercentiles) - 1])
 	}
 
-	r.Data.ThroughputKbs = r.Data.Latest.LatestByteThroughput / 1000.0
 	r.Data.AvgThroughputKbs = fmt.Sprintf("%.4f", r.Data.Latest.AverageByteThroughput / 1000.0)
 	r.Data.AvgThroughputResps = fmt.Sprintf("%.4f", r.Data.Latest.AverageRespThroughput)
 
 	r.Data.TimeElapsed = r.Data.Latest.TimeElapsed.String()
 	r.Data.TotalTime = r.Data.Latest.TotalTestDuration.String()
-
 	r.Data.FailureMap = make(map[string]int)
 	for _, failures := range r.Data.Latest.FailureCounts {
 		if (len(failures) > 1) {
 			r.Data.FailureMap[failures[0].Error()] = len(failures)
 		}
 	}
+
+	r.Data.SampledRespThroughputs, r.Data.RespThroughPutSampling = r.SampleData(r.Data.Latest.RespThroughputs)
+	r.Data.SampledByteThroughputs, r.Data.ByteThroughPutSampling = r.SampleData(r.Data.Latest.ByteThroughputs)
+
+	rawRespondTimesSecs := []float64{}
+	for _, latency := range r.Data.Latest.TimeToRespond {
+		rawRespondTimesSecs = append(rawRespondTimesSecs, latency / 1000 / 1000 / 1000)
+	}
+	r.Data.SampledConnectionLatencies, r.Data.ConnectionLatencySampling = r.SampleData(rawRespondTimesSecs)
+
+	rawConnectTimesSecs := []float64{}
+	for _, latency := range r.Data.Latest.TimeToConnect {
+		rawConnectTimesSecs = append(rawConnectTimesSecs, latency / 1000 / 1000 / 1000)
+	}
+	r.Data.SampledResponseLatencies, r.Data.ResponseLatencySampling = r.SampleData(rawConnectTimesSecs)
+
 }
+
+const MAX_DATA_SIZE = 250.0
+
+func (r *RenderHTML) SampleData(data []float64) (sampledData []float64, sampling float64) {
+	if (float64( len(data) ) < MAX_DATA_SIZE) {
+		return data, 1
+	}
+
+	sampling = math.Ceil( float64 ( len(data) ) / MAX_DATA_SIZE )
+
+	for index, item := range data {
+		if (index % int(sampling) == 0) {
+			sampledData = append(sampledData, item)
+		}
+	}
+	return sampledData, sampling
+}
+
 
 func (r *RenderHTML) GeneratePercentiles(stats AggregatedStats) (connectOutput, totalOutput, responseOutput []float64){
 	if (stats.TotalRequests == 0 ){
@@ -171,28 +197,28 @@ func (r *RenderHTML) GeneratePercentiles(stats AggregatedStats) (connectOutput, 
 }
 
 func (r *RenderHTML) Render() {
-	htmlTempl := template.New("testResults")
-	templateBytes, err := ioutil.ReadFile("./lib/static/template.html")
-	if (err != nil) {
-		fmt.Printf("err %v \n",err)
-	}
-	htmlTempl.Parse(string(templateBytes))
-
-	buf := bytes.NewBufferString("")
-	err = htmlTempl.ExecuteTemplate(buf, "testResults", r.Data)
-	if (err != nil) {
-		fmt.Printf("err %v \n",err)
-	}
-
-	outputBytes, err := ioutil.ReadAll(buf)
-	if (err != nil) {
-		fmt.Printf("err %v \n",err)
-	}
-
-	ioutil.WriteFile("./output.html", outputBytes, 0644)
-
-
-	Log("reporter","HTML output rendered")
+//	htmlTempl := template.New("testResults")
+//	templateBytes, err := ioutil.ReadFile("./lib/static/template.html")
+//	if (err != nil) {
+//		fmt.Printf("err %v \n",err)
+//	}
+//	htmlTempl.Parse(string(templateBytes))
+//
+//	buf := bytes.NewBufferString("")
+//	err = htmlTempl.ExecuteTemplate(buf, "testResults", r.Data)
+//	if (err != nil) {
+//		fmt.Printf("err %v \n",err)
+//	}
+//
+//	outputBytes, err := ioutil.ReadAll(buf)
+//	if (err != nil) {
+//		fmt.Printf("err %v \n",err)
+//	}
+//
+//	ioutil.WriteFile("./output.html", outputBytes, 0644)
+//
+//
+//	Log("reporter","HTML output rendered")
 }
 
 func (re *RenderHTML)frontendClient (so socketio.Socket) {
