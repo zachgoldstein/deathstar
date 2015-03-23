@@ -1,4 +1,4 @@
-# Testscaleman
+# Deathstar
 
 An API integration testing tool that will send a specific amount of traffic at an API, measuring it's ability to scale to specific amounts of load.
 
